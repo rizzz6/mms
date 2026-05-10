@@ -2,7 +2,7 @@ import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { History, User, Calendar, Clock } from 'lucide-react'
+import { History, User, Clock } from 'lucide-react'
 
 export default async function RosterLogsPage() {
   const supabase = await createClient()
@@ -12,17 +12,18 @@ export default async function RosterLogsPage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role')
+    .select('role, mess_id')
     .eq('id', user.id)
     .single()
   
-  if (profile?.role !== 'manager') {
+  if (profile?.role !== 'manager' || !profile?.mess_id) {
     redirect('/dashboard')
   }
 
   const { data: logs } = await supabase
     .from('duty_roster_logs')
     .select('*, profiles!changed_by(full_name)')
+    .eq('mess_id', profile.mess_id)
     .order('created_at', { ascending: false })
 
   return (
@@ -75,7 +76,7 @@ export default async function RosterLogsPage() {
   )
 }
 
-function Badge({ children, className, variant }: any) {
+function Badge({ children, className }: { children: React.ReactNode; className?: string; variant?: string }) {
   return (
     <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 ${className}`}>
       {children}

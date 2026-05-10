@@ -18,10 +18,35 @@ self.addEventListener('activate', (event) => {
 })
 
 self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET' || event.request.url.includes('supabase')) {
+  // Skip non-GET requests and Supabase API calls
+  if (event.request.method !== 'GET' || event.request.url.includes('supabase.co')) {
     return
   }
-  event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request))
-  )
+
+  // Network First strategy for pages, Cache First for static assets
+  const isPage = event.request.mode === 'navigate' || 
+                 event.request.headers.get('accept')?.includes('text/html')
+
+  if (isPage) {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          const copy = response.clone()
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy))
+          return response
+        })
+        .catch(() => caches.match(event.request))
+    )
+  } else {
+    // Cache First for other assets (JS, CSS, Images)
+    event.respondWith(
+      caches.match(event.request).then((cached) => {
+        return cached || fetch(event.request).then((response) => {
+          const copy = response.clone()
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy))
+          return response
+        })
+      })
+    )
+  }
 })

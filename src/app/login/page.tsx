@@ -6,17 +6,17 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Loader2, UtensilsCrossed } from 'lucide-react'
-import { useRouter } from 'next/navigation'
+import { Loader2, UtensilsCrossed, Eye, EyeOff } from 'lucide-react'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [fullName, setFullName] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isSignUp, setIsSignUp] = useState(false)
   const supabase = createClient()
-  const router = useRouter()
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -25,26 +25,38 @@ export default function LoginPage() {
 
     try {
       if (isSignUp) {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
             emailRedirectTo: `${window.location.origin}/auth/callback`,
+            data: {
+              full_name: fullName,
+            }
           },
         })
         if (error) throw error
-        setError('Check your email for the confirmation link!')
+        
+        // If email confirmation is disabled, we get a session immediately
+        if (data.session) {
+          window.location.href = '/dashboard'
+        } else {
+          setError('Check your email for the confirmation link!')
+        }
       } else {
         const { error } = await supabase.auth.signInWithPassword({
           email,
           password,
         })
         if (error) throw error
-        router.refresh()
-        router.push('/dashboard')
+        window.location.href = '/dashboard'
       }
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message)
+      } else {
+        setError(String(err))
+      }
     } finally {
       setLoading(false)
     }
@@ -68,6 +80,18 @@ export default function LoginPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleAuth} className="space-y-4">
+            {isSignUp && (
+              <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                <Input
+                  type="text"
+                  placeholder="Full Name"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  required={isSignUp}
+                  className="h-11"
+                />
+              </div>
+            )}
             <div className="space-y-2">
               <Input
                 type="email"
@@ -78,15 +102,22 @@ export default function LoginPage() {
                 className="h-11"
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 relative">
               <Input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="h-11"
+                className="h-11 pr-10"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
             </div>
             {error && (
               <Alert variant={error.includes('Check your email') ? 'default' : 'destructive'} className="py-2">

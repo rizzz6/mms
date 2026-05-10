@@ -2,6 +2,8 @@ export interface Member {
   id: string
   full_name: string
   joined_at: string
+  is_inactive?: boolean
+  inactive_until?: string | null
 }
 
 export interface DutyRecord {
@@ -10,11 +12,13 @@ export interface DutyRecord {
   date: string
   duty_type: 'bazar' | 'water'
   is_skipped: boolean
+  is_cancelled?: boolean
 }
 
 export interface AssignmentDetail {
   member: Member
   isSkipped: boolean
+  isCancelled: boolean
   isPenalty: boolean
   recordId?: string
 }
@@ -69,35 +73,67 @@ function computeQueueForType(
     const dateStr = current.toISOString().split('T')[0]
 
     // Check if DB already has a record for this day/type
-    const existing = allRecords.find(r => r.duty_type === type && r.date === dateStr)
+    let existing: DutyRecord | undefined = allRecords.find(r => r.duty_type === type && r.date === dateStr)
 
     if (existing) {
-      const member = members.find(m => m.id === existing.user_id)
-      if (member) {
+      const e = existing // Capture for narrowing
+      const member = members.find(m => m.id === e.user_id)
+      const isInactive = member && (member.is_inactive || (member.inactive_until && new Date(member.inactive_until).toISOString().split('T')[0] >= dateStr))
+      
+      if (member && !isInactive) {
         result[dateStr] = {
           member,
-          isSkipped: existing.is_skipped,
-          isPenalty: false, // existing records are treated as final
-          recordId: existing.id
+          isSkipped: e.is_skipped,
+          isCancelled: !!e.is_cancelled,
+          isPenalty: false,
+          recordId: e.id
         }
+      } else {
+        // Member is inactive or not found, fall through to replacement logic
+        // We'll treat this day as having no valid record for this type
+        existing = undefined
       }
-    } else {
-      // Logic: Penalty Pool FIRST, then normal Queue
-      let assignedMember: Member
+    }
+
+    if (!existing) {
+      let assignedMember: Member | null = null
       let isPenalty = false
 
-      if (penaltyPool.length > 0) {
-        assignedMember = penaltyPool.shift()!
-        isPenalty = true
-      } else {
-        assignedMember = members[queuePointer % members.length]
-        queuePointer++
+      // Try penalty pool first
+      while (penaltyPool.length > 0) {
+        const candidate = penaltyPool.shift()!
+        const isInactive = candidate.is_inactive || (candidate.inactive_until && new Date(candidate.inactive_until).toISOString().split('T')[0] >= dateStr)
+        if (!isInactive) {
+          assignedMember = candidate
+          isPenalty = true
+          break
+        }
       }
 
-      result[dateStr] = {
-        member: assignedMember,
-        isSkipped: false,
-        isPenalty
+      // If no penalty or penalty was inactive, try normal queue
+      if (!assignedMember) {
+        let attempts = 0
+        while (attempts < members.length) {
+          const candidate = members[queuePointer % members.length]
+          const isInactive = candidate.is_inactive || (candidate.inactive_until && new Date(candidate.inactive_until).toISOString().split('T')[0] >= dateStr)
+          
+          if (!isInactive) {
+            assignedMember = candidate
+            queuePointer++
+            break
+          }
+          queuePointer++
+          attempts++
+        }
+      }
+
+      if (assignedMember) {
+        result[dateStr] = {
+          member: assignedMember,
+          isSkipped: false,
+          isCancelled: false,
+          isPenalty
+        }
       }
     }
   }

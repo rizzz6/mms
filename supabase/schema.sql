@@ -4,20 +4,32 @@ CREATE TYPE meal_type AS ENUM ('lunch', 'dinner');
 CREATE TYPE meal_status AS ENUM ('eating', 'off');
 CREATE TYPE transaction_status AS ENUM ('pending', 'approved', 'rejected');
 CREATE TYPE duty_type AS ENUM ('bazar', 'water');
+CREATE TYPE member_status AS ENUM ('pending', 'approved', 'rejected');
 
 -- 2. Create Tables
-CREATE TABLE profiles (
-    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-    full_name TEXT,
-    role user_role NOT NULL DEFAULT 'member',
+CREATE TABLE messes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    join_code TEXT UNIQUE NOT NULL,
+    manager_id UUID NOT NULL,
     upi_id TEXT,
     qr_code_url TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE profiles (
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    mess_id UUID REFERENCES messes(id) ON DELETE SET NULL,
+    full_name TEXT,
+    role user_role NOT NULL DEFAULT 'member',
+    status member_status NOT NULL DEFAULT 'pending',
     balance NUMERIC NOT NULL DEFAULT 0,
     joined_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE meals (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    mess_id UUID NOT NULL REFERENCES messes(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
     date DATE NOT NULL,
     type meal_type NOT NULL,
@@ -28,6 +40,7 @@ CREATE TABLE meals (
 
 CREATE TABLE bazar_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    mess_id UUID NOT NULL REFERENCES messes(id) ON DELETE CASCADE,
     shopper_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
     amount NUMERIC NOT NULL,
     items TEXT NOT NULL,
@@ -38,6 +51,7 @@ CREATE TABLE bazar_logs (
 
 CREATE TABLE transactions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    mess_id UUID NOT NULL REFERENCES messes(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
     amount NUMERIC NOT NULL,
     proof_url TEXT,
@@ -48,50 +62,95 @@ CREATE TABLE transactions (
 
 CREATE TABLE duty_roster (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    mess_id UUID NOT NULL REFERENCES messes(id) ON DELETE CASCADE,
     user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
     date DATE NOT NULL,
     duty_type duty_type NOT NULL,
     is_skipped BOOLEAN NOT NULL DEFAULT false,
+    is_cancelled BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE mess_config (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    mess_id UUID NOT NULL REFERENCES messes(id) ON DELETE CASCADE,
+    key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    description TEXT,
+    UNIQUE(mess_id, key)
+);
+
+CREATE TABLE duty_roster_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    mess_id UUID NOT NULL REFERENCES messes(id) ON DELETE CASCADE,
+    roster_id UUID REFERENCES duty_roster(id) ON DELETE CASCADE,
+    changed_by UUID NOT NULL REFERENCES profiles(id),
+    action TEXT NOT NULL,
+    note TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- 3. Enable RLS
+ALTER TABLE messes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE meals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE bazar_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE duty_roster ENABLE ROW LEVEL SECURITY;
+ALTER TABLE mess_config ENABLE ROW LEVEL SECURITY;
+ALTER TABLE duty_roster_logs ENABLE ROW LEVEL SECURITY;
 
--- 4. Basic RLS Policies
--- Profiles: Everyone can read. Users can update their own profile (Manager can update any).
-CREATE POLICY "Profiles are viewable by everyone." ON profiles FOR SELECT USING (true);
-CREATE POLICY "Users can update own profile." ON profiles FOR UPDATE USING (auth.uid() = id);
+-- 4. RLS Policies (Multi-tenant)
 
--- Meals: Everyone can read. Users manage their own meals. Manager manages all.
-CREATE POLICY "Meals viewable by everyone." ON meals FOR SELECT USING (true);
-CREATE POLICY "Users insert own meals." ON meals FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users update own meals." ON meals FOR UPDATE USING (auth.uid() = user_id);
+-- Messes: Viewable if you are a member or manager of it.
+CREATE POLICY "Messes viewable by members" ON messes FOR SELECT USING (id IN (SELECT mess_id FROM profiles WHERE id = auth.uid()));
 
--- Transactions: Users can view/insert their own. Manager can view/update all.
-CREATE POLICY "Users view own transactions." ON transactions FOR SELECT USING (auth.uid() = user_id OR (SELECT role FROM profiles WHERE id = auth.uid()) = 'manager');
-CREATE POLICY "Users insert own transactions." ON transactions FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Manager can update transactions." ON transactions FOR UPDATE USING ((SELECT role FROM profiles WHERE id = auth.uid()) = 'manager');
+-- Profiles: Viewable by others in the same mess.
+CREATE POLICY "Profiles viewable by same mess" ON profiles FOR SELECT USING (mess_id IN (SELECT mess_id FROM profiles WHERE id = auth.uid()));
+CREATE POLICY "Users can update own profile" ON profiles FOR UPDATE USING (auth.uid() = id);
+CREATE POLICY "Manager can update mess members" ON profiles FOR UPDATE USING (
+    (SELECT role FROM profiles WHERE id = auth.uid()) = 'manager' AND mess_id IN (SELECT mess_id FROM profiles WHERE id = auth.uid())
+);
 
--- 5. Authentication Logic: First Sign-up = Manager
+-- Meals, Bazar, Transactions, Roster, Config, Logs: Filter by mess_id
+CREATE POLICY "Mess meals viewable by members" ON meals FOR SELECT USING (mess_id IN (SELECT mess_id FROM profiles WHERE id = auth.uid()));
+CREATE POLICY "Mess bazar viewable by members" ON bazar_logs FOR SELECT USING (mess_id IN (SELECT mess_id FROM profiles WHERE id = auth.uid()));
+CREATE POLICY "Mess transactions viewable by members" ON transactions FOR SELECT USING (mess_id IN (SELECT mess_id FROM profiles WHERE id = auth.uid()));
+CREATE POLICY "Mess roster viewable by members" ON duty_roster FOR SELECT USING (mess_id IN (SELECT mess_id FROM profiles WHERE id = auth.uid()));
+CREATE POLICY "Mess config viewable by members" ON mess_config FOR SELECT USING (mess_id IN (SELECT mess_id FROM profiles WHERE id = auth.uid()));
+CREATE POLICY "Mess logs viewable by members" ON duty_roster_logs FOR SELECT USING (mess_id IN (SELECT mess_id FROM profiles WHERE id = auth.uid()));
+CREATE POLICY "Users insert own duty logs" ON duty_roster_logs FOR INSERT WITH CHECK (
+    mess_id IN (SELECT mess_id FROM profiles WHERE id = auth.uid()) 
+    AND auth.uid() = changed_by
+);
+CREATE POLICY "Manager manage all logs" ON duty_roster_logs FOR ALL USING (
+    (SELECT role FROM profiles WHERE id = auth.uid()) = 'manager'
+) WITH CHECK (
+    (SELECT role FROM profiles WHERE id = auth.uid()) = 'manager'
+);
+
+-- Insert/Update permissions
+CREATE POLICY "Users manage own meals" ON meals FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "Users insert own bazar" ON bazar_logs FOR INSERT WITH CHECK (auth.uid() = shopper_id);
+CREATE POLICY "Manager verify bazar" ON bazar_logs FOR UPDATE USING ((SELECT role FROM profiles WHERE id = auth.uid()) = 'manager');
+
+CREATE POLICY "Users manage own transactions" ON transactions FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "Manager verify transactions" ON transactions FOR UPDATE USING ((SELECT role FROM profiles WHERE id = auth.uid()) = 'manager');
+
+CREATE POLICY "Users manage own duty" ON duty_roster FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "Manager manage all duty" ON duty_roster FOR ALL USING ((SELECT role FROM profiles WHERE id = auth.uid()) = 'manager');
+
+CREATE POLICY "Manager manage config" ON mess_config FOR ALL USING ((SELECT role FROM profiles WHERE id = auth.uid()) = 'manager');
+
+-- 5. Authentication Logic: Simple profile creation
 CREATE OR REPLACE FUNCTION public.handle_new_user() 
 RETURNS TRIGGER AS $$
-DECLARE
-  user_count INT;
 BEGIN
-  SELECT count(*) INTO user_count FROM public.profiles;
-  
-  INSERT INTO public.profiles (id, full_name, role)
+  INSERT INTO public.profiles (id, full_name)
   VALUES (
     NEW.id,
-    NEW.raw_user_meta_data->>'full_name',
-    CASE WHEN user_count = 0 THEN 'manager'::user_role ELSE 'member'::user_role END
+    NEW.raw_user_meta_data->>'full_name'
   );
-  
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -100,85 +159,36 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
 
--- Allow manager to upload files to the 'payments' bucket
-CREATE POLICY "Managers can upload QR codes" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'payments' AND (SELECT role FROM profiles WHERE id = auth.uid()) = 'manager');
-CREATE POLICY "QR codes are publicly viewable" ON storage.objects FOR SELECT USING (bucket_id = 'payments');
+-- 6. Storage Policies
+CREATE POLICY "Mess storage access" ON storage.objects FOR ALL USING (bucket_id = 'payments' AND (SELECT mess_id FROM profiles WHERE id = auth.uid()) IS NOT NULL);
 
--- Unique constraint for meal upserts
+-- 7. Constraints
 ALTER TABLE meals ADD CONSTRAINT meals_user_date_type_unique UNIQUE (user_id, date, type);
-
--- Allow authenticated members to upload payment proofs
-CREATE POLICY "Members can upload payment proofs" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'payments' AND name LIKE 'proofs/%' AND auth.role() = 'authenticated');
-
--- Manager can update bazar_logs (verify entries)
-CREATE POLICY "Manager can update bazar logs" ON bazar_logs FOR UPDATE USING ((SELECT role FROM profiles WHERE id = auth.uid()) = 'manager');
--- Manager can update any profile (to increment balance)
-CREATE POLICY "Manager can update any profile" ON profiles FOR UPDATE USING ((SELECT role FROM profiles WHERE id = auth.uid()) = 'manager');
-
--- Phase 7: Duty Roster Logs and Policies
-CREATE TABLE duty_roster_logs (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    roster_id UUID REFERENCES duty_roster(id) ON DELETE CASCADE,
-    changed_by UUID NOT NULL REFERENCES profiles(id),
-    action TEXT NOT NULL,
-    note TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-ALTER TABLE duty_roster_logs ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Duty roster viewable by all" ON duty_roster FOR SELECT USING (true);
-CREATE POLICY "Members can update own duty" ON duty_roster FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Manager can insert duty records" ON duty_roster FOR INSERT WITH CHECK ((SELECT role FROM profiles WHERE id = auth.uid()) = 'manager');
-
-CREATE POLICY "Manager can view duty logs" ON duty_roster_logs FOR SELECT USING ((SELECT role FROM profiles WHERE id = auth.uid()) = 'manager');
-CREATE POLICY "Authenticated users can insert duty logs" ON duty_roster_logs FOR INSERT WITH CHECK (auth.uid() = changed_by);
-
 ALTER TABLE duty_roster ADD CONSTRAINT duty_roster_user_date_type_unique UNIQUE (user_id, date, duty_type);
 
--- Phase 8: Bazar Log Policies
-CREATE POLICY "Members can insert own bazar logs" ON bazar_logs FOR INSERT WITH CHECK (auth.uid() = shopper_id);
-CREATE POLICY "Bazar logs viewable by all" ON bazar_logs FOR SELECT USING (true);
-
--- Phase 9: Mess Configuration
-CREATE TABLE mess_config (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL,
-    description TEXT
-);
-
-ALTER TABLE mess_config ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Config readable by all" ON mess_config FOR SELECT USING (true);
-CREATE POLICY "Manager can update config" ON mess_config FOR UPDATE USING ((SELECT role FROM profiles WHERE id = auth.uid()) = 'manager');
-
-INSERT INTO mess_config (key, value, description) VALUES
-  ('guest_meal_rate', '60', 'Fixed charge per guest meal in INR'),
-  ('mess_start_date', '2024-01-01', 'Date from which meal rate calculation begins');
-
--- Phase 10: Manager Handover RPC
+-- 8. Manager Handover RPC (Mess-aware)
 CREATE OR REPLACE FUNCTION public.transfer_manager_role(new_manager_id UUID)
-RETURNS void AS 
+RETURNS void AS $$
+DECLARE
+    target_mess_id UUID;
 BEGIN
-  -- Validate: new manager must be a member
-  IF (SELECT role FROM public.profiles WHERE id = new_manager_id) <> 'member' THEN
-    RAISE EXCEPTION 'Selected user is not an active member.';
+  -- Get current manager's mess
+  SELECT mess_id INTO target_mess_id FROM public.profiles WHERE id = auth.uid() AND role = 'manager';
+  
+  IF target_mess_id IS NULL THEN
+    RAISE EXCEPTION 'Only an active manager can transfer the role.';
   END IF;
 
-  -- Validate: caller must be the current manager
-  IF (SELECT role FROM public.profiles WHERE id = auth.uid()) <> 'manager' THEN
-    RAISE EXCEPTION 'Only the current manager can transfer the role.';
+  -- Validate: new manager must be in the same mess and approved
+  IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = new_manager_id AND mess_id = target_mess_id AND status = 'approved') THEN
+    RAISE EXCEPTION 'Selected user is not an approved member of this mess.';
   END IF;
 
-  -- Demote current manager to member
-  UPDATE public.profiles
-  SET role = 'member'
-  WHERE id = auth.uid();
-
-  -- Promote new user to manager
-  UPDATE public.profiles
-  SET role = 'manager'
-  WHERE id = new_manager_id;
+  -- Demote current manager
+  UPDATE public.profiles SET role = 'member' WHERE id = auth.uid();
+  -- Promote new manager
+  UPDATE public.profiles SET role = 'manager' WHERE id = new_manager_id;
+  -- Update messes table
+  UPDATE public.messes SET manager_id = new_manager_id WHERE id = target_mess_id;
 END;
- LANGUAGE plpgsql SECURITY DEFINER
-   SET search_path = public;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
