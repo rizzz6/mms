@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "build:cf": "opennextjs-cloudflare build && node -e \"const fs = require('fs'); fs.renameSync('.open-next/worker.js', '.open-next/_worker.js')\"",
+    "build:cf": "opennextjs-cloudflare build && node -e \"const fs = require('fs'); let w = fs.readFileSync('.open-next/worker.js', 'utf8'); w = w.replace(/const { handler } = await import\\((.+?)\\)/, 'const mod = await import($1); const handler = mod.handler || mod.default || mod'); fs.writeFileSync('.open-next/_worker.js', w); fs.unlinkSync('.open-next/worker.js')\"",
     "start": "next start",
     "lint": "eslint",
     "deploy": "npm run build:cf && opennextjs-cloudflare deploy",
