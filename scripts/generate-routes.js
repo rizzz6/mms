@@ -8,7 +8,6 @@ const routes = {
     "/_next/static/*",
     "/favicon.ico",
     "/sw.js",
-    "/manifest.webmanifest",
     "/*.svg",
     "/*.png",
     "/*.jpg",
