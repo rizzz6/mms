@@ -1,3 +1,5 @@
+export const runtime = 'edge'
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { UtensilsCrossed, ShieldCheck, Wallet, CalendarRange, ArrowRight, CheckCircle2 } from "lucide-react";
