@@ -4,11 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "opennextjs-cloudflare build",
+    "build": "next build",
+    "build:cf": "opennextjs-cloudflare build",
     "start": "next start",
     "lint": "eslint",
-    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
-    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview"
+    "deploy": "npm run build:cf && opennextjs-cloudflare deploy",
+    "preview": "npm run build:cf && opennextjs-cloudflare preview"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
