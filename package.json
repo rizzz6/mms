@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "build:cf": "opennextjs-cloudflare build && node -e \"const fs = require('fs'); fs.renameSync('.open-next/worker.js', '.open-next/_worker.js')\"",
+    "build:cf": "opennextjs-cloudflare build && node -e \"const fs = require('fs'); fs.renameSync('.open-next/worker.js', '.open-next/_worker.js'); fs.cpSync('.open-next/assets', '.open-next', {recursive: true});\"",
     "start": "next start",
     "lint": "eslint",
     "deploy": "npm run build:cf && opennextjs-cloudflare deploy",
