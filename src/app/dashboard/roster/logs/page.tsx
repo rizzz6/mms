@@ -16,7 +16,8 @@ export default async function RosterLogsPage() {
     .eq('id', user.id)
     .single()
   
-  if (profile?.role !== 'manager' || !profile?.mess_id) {
+  const allowedRoles = ['manager', 'co_manager']
+  if (!profile || !allowedRoles.includes(profile.role) || !profile?.mess_id) {
     redirect('/dashboard')
   }
 

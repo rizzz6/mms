@@ -18,6 +18,9 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
+import { notifyManager } from '@/app/actions/push'
+import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
 
 // --- Types & Utilities ---
 
@@ -84,13 +87,17 @@ export default function AttendanceSheet() {
   }
   
   const [guestMealTypes, setGuestMealTypes] = useState<{label: string, price: number}[]>([])
+  const [guestMealRate, setGuestMealRate] = useState(60)
+  const [guestList, setGuestList] = useState<any[]>([])
+  const [isProcessing, setIsProcessing] = useState(false)
   const [showAddGuest, setShowAddGuest] = useState(false)
   const [addingGuest, setAddingGuest] = useState(false)
   const [guestForm, setGuestForm] = useState({
     userId: '',
     date: new Date().toISOString().split('T')[0],
     type: 'lunch' as MealType,
-    guestType: ''
+    guestType: '',
+    guestName: ''
   })
   
   const supabase = createClient()
@@ -125,7 +132,7 @@ export default function AttendanceSheet() {
       const [pRes, mRes, cRes, messRes] = await Promise.all([
         supabase.from('profiles').select('id, full_name, role, joined_at').eq('mess_id', currentProfile.mess_id).eq('status', 'approved').order('full_name'),
         supabase.from('meals').select('*').eq('mess_id', currentProfile.mess_id).gte('date', startOfMonth).lte('date', endOfMonth),
-        supabase.from('mess_config').select('key, value').eq('mess_id', currentProfile.mess_id).eq('key', 'guest_meal_types').maybeSingle(),
+        supabase.from('mess_config').select('key, value').eq('mess_id', currentProfile.mess_id),
         supabase.from('messes').select('created_at').eq('id', currentProfile.mess_id).single()
       ])
 
@@ -133,14 +140,20 @@ export default function AttendanceSheet() {
         setMessCreatedDate(new Date(messRes.data.created_at).toISOString().split('T')[0])
       }
 
+      let parsedMealTypes: {label: string, price: number}[] = []
+      let parsedRate = 60
       if (cRes.data) {
-        try { setGuestMealTypes(JSON.parse(cRes.data.value)) } catch(e) {
-          console.error('Failed to parse guest_meal_types:', e)
-          setGuestMealTypes([])
-        }
-      } else {
-        setGuestMealTypes([])
+        cRes.data.forEach(row => {
+          if (row.key === 'guest_meal_types') {
+            try { parsedMealTypes = JSON.parse(row.value) } catch {}
+          }
+          if (row.key === 'guest_meal_rate') {
+            parsedRate = Number(row.value) || 60
+          }
+        })
       }
+      setGuestMealTypes(parsedMealTypes)
+      setGuestMealRate(parsedRate)
 
       if (pRes.data) {
         setProfiles(pRes.data as Profile[])
@@ -148,10 +161,16 @@ export default function AttendanceSheet() {
 
       if (mRes.data) {
         const mealMap: Record<string, MealRecord> = {}
+        const guests: any[] = []
         mRes.data.forEach(m => {
-          mealMap[`${m.user_id}-${m.date}-${m.type}`] = m
+          if (!m.is_guest) {
+            mealMap[`${m.user_id}-${m.date}-${m.type}`] = m
+          } else {
+            guests.push(m)
+          }
         })
         setMeals(mealMap)
+        setGuestList(guests)
       }
     } catch (error) {
       console.error(error)
@@ -162,14 +181,13 @@ export default function AttendanceSheet() {
   }, [supabase, currentMonth])
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchData()
   }, [fetchData])
 
   const toggleMeal = async (userId: string, dateStr: string, type: MealType) => {
     const isMe = userId === user?.id
     if (!myProfile) return
-    const isManager = myProfile.role === 'manager'
+    const isManager = myProfile.role === 'manager' || myProfile.role === 'co_manager'
     
     // Only allow self-toggle if not locked, OR manager override
     if (!isManager && !isMe) return
@@ -179,6 +197,16 @@ export default function AttendanceSheet() {
 
     const currentStatus = getMealStatus(userId, dateStr, type)
     const newStatus: MealStatus = currentStatus === 'off' ? 'eating' : 'off'
+    const key = `${userId}-${dateStr}-${type}`
+
+    // Save original meal record in case we need to revert
+    const originalMealRecord = meals[key]
+
+    // Perform optimistic local state update instantly
+    setMeals(prev => ({
+      ...prev,
+      [key]: { user_id: userId, date: dateStr, type, status: newStatus }
+    }))
 
     try {
       const { error } = await supabase
@@ -194,23 +222,46 @@ export default function AttendanceSheet() {
 
       if (error) throw error
       
-      // Optimistic Update
-      const key = `${userId}-${dateStr}-${type}`
-      setMeals(prev => ({
-        ...prev,
-        [key]: { user_id: userId, date: dateStr, type, status: newStatus }
-      }))
-      
       toast.success('Attendance updated')
+
+      // Notify manager if a member turns off a meal
+      if (!isManager && newStatus === 'off') {
+        notifyManager(myProfile.mess_id, 'manager_meal_toggles', {
+          title: 'Meal Turned Off',
+          body: `${myProfile.full_name} turned off their ${type} for ${dateStr}`,
+          url: '/dashboard/meals'
+        }).catch(console.error)
+      }
     } catch (error) {
+      // Revert to original state on request failure
+      setMeals(prev => {
+        const copy = { ...prev }
+        if (originalMealRecord) {
+          copy[key] = originalMealRecord
+        } else {
+          delete copy[key]
+        }
+        return copy
+      })
       if (error instanceof Error) toast.error(error.message)
       else toast.error(String(error))
     }
   }
 
   const handleAddGuest = async () => {
-    if (!guestForm.userId || !guestForm.guestType || !myProfile) return toast.error('Incomplete data or profile not loaded')
+    if (!guestForm.userId || !myProfile) return toast.error('Incomplete data or profile not loaded')
+    if (!guestForm.guestName.trim()) return toast.error('Please enter a name for the guest')
     
+    // Look up selected variety price
+    const selectedVariety = guestMealTypes.find(t => t.label === guestForm.guestType)
+    const lockedPrice = selectedVariety ? selectedVariety.price : guestMealRate
+
+    // Check same cutoff rules as members!
+    const isManager = myProfile.role === 'manager' || myProfile.role === 'co_manager'
+    if (!isManager && isLocked(guestForm.date, guestForm.type)) {
+      return toast.error('Cutoff time has passed for this meal!')
+    }
+
     setAddingGuest(true)
     try {
       const { error } = await supabase.from('meals').insert({
@@ -220,18 +271,55 @@ export default function AttendanceSheet() {
         type: guestForm.type,
         status: 'eating',
         is_guest: true,
-        guest_type: guestForm.guestType
+        guest_type: guestForm.guestType || 'Standard Guest',
+        guest_price: lockedPrice,
+        guest_name: guestForm.guestName.trim()
       })
 
       if (error) throw error
-      toast.success('Guest meal added!')
+      toast.success('Guest pre-registered successfully!')
       setShowAddGuest(false)
+      // Reset form
+      setGuestForm(prev => ({ ...prev, guestName: '', guestType: '' }))
       fetchData()
     } catch (error) {
       if (error instanceof Error) toast.error(error.message)
       else toast.error(String(error))
     } finally {
       setAddingGuest(false)
+    }
+  }
+
+  const handleDeleteGuest = async (guestId: string, hostId: string) => {
+    if (!myProfile) return
+    const isMe = hostId === user?.id
+    const isManager = myProfile.role === 'manager' || myProfile.role === 'co_manager'
+
+    if (!isManager && !isMe) {
+      return toast.error('You do not have permission to delete this guest')
+    }
+
+    // Check same cutoff rules as members!
+    const guestMeal = guestList.find(g => g.id === guestId)
+    if (!guestMeal) return
+    if (!isManager && isLocked(guestMeal.date, guestMeal.type)) {
+      return toast.error('Cutoff time has passed. Cannot cancel this guest!')
+    }
+
+    setIsProcessing(true)
+    try {
+      const { error } = await supabase
+        .from('meals')
+        .delete()
+        .eq('id', guestId)
+
+      if (error) throw error
+      toast.success('Guest meal cancelled!')
+      fetchData()
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to cancel guest meal')
+    } finally {
+      setIsProcessing(false)
     }
   }
 
@@ -243,8 +331,72 @@ export default function AttendanceSheet() {
 
   if (loading && profiles.length === 0) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      <div className="min-h-screen bg-slate-50 pb-20">
+        {/* Premium Header Skeleton */}
+        <div className="bg-white px-6 pt-8 pb-6 rounded-b-[2.5rem] shadow-sm border-b border-slate-100 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <Skeleton className="w-10 h-10 rounded-full" />
+            <Skeleton className="w-20 h-10 rounded-full" />
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="space-y-2">
+              <Skeleton className="h-3 w-16" />
+              <Skeleton className="h-8 w-40" />
+            </div>
+            <Skeleton className="h-10 w-32 rounded-2xl" />
+          </div>
+        </div>
+
+        <div className="max-w-4xl mx-auto px-4 space-y-6">
+          {/* Quick Toggle Skeleton */}
+          <Card className="border-0 shadow-lg bg-white overflow-hidden rounded-[2rem]">
+            <div className="p-4 border-b flex justify-between">
+              <Skeleton className="h-4 w-28" />
+              <Skeleton className="h-4 w-16" />
+            </div>
+            <div className="p-4 grid grid-cols-2 gap-4">
+              <div className="p-4 rounded-2xl border border-slate-100 space-y-3">
+                <Skeleton className="h-3 w-10" />
+                <div className="flex justify-between items-center">
+                  <Skeleton className="h-5 w-16" />
+                  <Skeleton className="h-6 w-10 rounded-full" />
+                </div>
+              </div>
+              <div className="p-4 rounded-2xl border border-slate-100 space-y-3">
+                <Skeleton className="h-3 w-10" />
+                <div className="flex justify-between items-center">
+                  <Skeleton className="h-5 w-16" />
+                  <Skeleton className="h-6 w-10 rounded-full" />
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          {/* Grid Table Skeleton */}
+          <div className="bg-white rounded-2xl shadow-xl border overflow-hidden p-4 space-y-4">
+            <div className="flex justify-between items-center pb-2 border-b">
+              <Skeleton className="h-4 w-24" />
+              <div className="flex gap-2">
+                {Array.from({ length: 7 }).map((_, i) => (
+                  <Skeleton key={i} className="h-6 w-10" />
+                ))}
+              </div>
+            </div>
+            {Array.from({ length: 6 }).map((_, r) => (
+              <div key={r} className="flex justify-between items-center py-2">
+                <Skeleton className="h-4 w-28" />
+                <div className="flex gap-2">
+                  {Array.from({ length: 7 }).map((_, c) => (
+                    <div key={c} className="flex gap-1">
+                      <Skeleton className="h-8 w-6 rounded-md" />
+                      <Skeleton className="h-8 w-6 rounded-md" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     )
   }
@@ -316,7 +468,7 @@ export default function AttendanceSheet() {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Host Member</Label>
-              {myProfile?.role === 'manager' ? (
+              {(myProfile?.role === 'manager' || myProfile?.role === 'co_manager') ? (
                 <select 
                   className="w-full h-11 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
                   value={guestForm.userId} 
@@ -332,6 +484,16 @@ export default function AttendanceSheet() {
                   {myProfile?.full_name}
                 </div>
               )}
+            </div>
+            <div className="space-y-2">
+              <Label>Guest Name / ID</Label>
+              <Input 
+                type="text" 
+                placeholder="e.g. Cousin, Friend" 
+                value={guestForm.guestName} 
+                onChange={(e) => setGuestForm({ ...guestForm, guestName: e.target.value })} 
+                className="rounded-xl h-11"
+              />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -565,8 +727,79 @@ export default function AttendanceSheet() {
         </div>
       </div>
       
+      {/* Pre-Registered Guests Section */}
+      <Card className="border-0 shadow-lg bg-white overflow-hidden mt-6">
+        <div className="bg-primary/5 p-4 border-b flex items-center justify-between">
+          <div className="space-y-0.5">
+            <h3 className="text-xs font-black uppercase tracking-wider text-primary">Pre-Registered Guests</h3>
+            <p className="text-[9px] text-slate-400 font-medium">Guests registered for this month ({currentMonth.toLocaleString('default', { month: 'short', year: 'numeric' })})</p>
+          </div>
+          <Badge variant="secondary" className="font-bold text-[10px] rounded-lg">
+            {guestList.length} Total
+          </Badge>
+        </div>
+        <CardContent className="p-0 divide-y divide-slate-100 max-h-[300px] overflow-y-auto">
+          {guestList.length === 0 ? (
+            <div className="p-8 text-center text-slate-400">
+              <Users className="w-8 h-8 mx-auto mb-2 opacity-30 text-slate-400" />
+              <p className="text-xs font-medium">No guests pre-registered for this month.</p>
+            </div>
+          ) : (
+            guestList.map(guest => {
+              const hostProfile = profiles.find(p => p.id === guest.user_id)
+              const locked = isLocked(guest.date, guest.type)
+              const hostName = hostProfile ? hostProfile.full_name : 'Unknown Host'
+              
+              return (
+                <div key={guest.id} className="p-3.5 flex items-center justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-sm text-slate-800 truncate">{guest.guest_name || 'Guest'}</span>
+                      <Badge variant="outline" className="text-[9px] h-4 font-bold bg-slate-50 uppercase text-slate-500 px-1 border-slate-200">
+                        {guest.type}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-1 text-[10px] text-slate-400 font-medium">
+                      <span>{new Date(guest.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
+                      <span>•</span>
+                      <span>Hosted by {hostName}</span>
+                      {guest.guest_type && (
+                        <>
+                          <span>•</span>
+                          <span className="text-primary font-semibold">{guest.guest_type}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-3 shrink-0">
+                    <div className="text-right">
+                      <p className="text-xs font-black text-slate-700">₹{guest.guest_price || guestMealRate}</p>
+                      <p className="text-[8px] text-slate-400 uppercase font-bold">Locked Rate</p>
+                    </div>
+                    
+                    {(myProfile?.role === 'manager' || myProfile?.role === 'co_manager' || guest.user_id === user?.id) && (
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className={`h-7 w-7 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 ${locked && myProfile?.role !== 'manager' && myProfile?.role !== 'co_manager' ? 'opacity-30 cursor-not-allowed' : ''}`}
+                        onClick={() => handleDeleteGuest(guest.id, guest.user_id)}
+                        disabled={isProcessing}
+                        title={locked && myProfile?.role !== 'manager' && myProfile?.role !== 'co_manager' ? 'Cutoff passed. Cannot delete.' : 'Cancel Guest'}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )
+            })
+          )}
+        </CardContent>
+      </Card>
+
       {/* Legend */}
-      <div className="flex items-center justify-center gap-6 p-4 bg-white rounded-2xl border shadow-sm text-[10px] font-bold uppercase tracking-wider text-slate-500">
+      <div className="flex items-center justify-center gap-6 p-4 bg-white rounded-2xl border shadow-sm text-[10px] font-bold uppercase tracking-wider text-slate-500 mt-6">
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 bg-green-500 rounded-full" /> Eating
         </div>

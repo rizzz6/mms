@@ -7,9 +7,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2, QrCode, Save, Upload, AlertTriangle, ArrowRightLeft, Check, X, Settings, Copy, ChevronRight } from 'lucide-react'
+import { Loader2, QrCode, Save, Upload, AlertTriangle, ArrowRightLeft, Check, X, Settings, Copy, ChevronRight, Bell } from 'lucide-react'
 import { toast } from 'sonner'
 import Image from 'next/image'
+import ManagerNotificationSettings from '@/components/ManagerNotificationSettings'
 import {
   Dialog,
   DialogContent,
@@ -45,6 +46,13 @@ export default function MessConfigPage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
+  // Fine & Penalty states
+  const [finesEnabled, setFinesEnabled] = useState(false)
+  const [penaltySkippedDuty, setPenaltySkippedDuty] = useState('')
+  const [penaltyLowBalance, setPenaltyLowBalance] = useState('')
+  const [minRequiredBalance, setMinRequiredBalance] = useState('')
+  const [auditLogRetentionDays, setAuditLogRetentionDays] = useState('90')
+
   const supabase = createClient()
 
   useEffect(() => {
@@ -56,7 +64,7 @@ export default function MessConfigPage() {
       const [pRes, mRes, cRes] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', user.id).single(),
         supabase.from('profiles').select('id, full_name').eq('mess_id', (await supabase.from('profiles').select('mess_id').eq('id', user.id).single()).data?.mess_id).eq('role', 'member').order('joined_at', { ascending: true }),
-        supabase.from('mess_config').select('key, value').in('key', ['guest_meal_rate', 'guest_meal_types']).eq('mess_id', (await supabase.from('profiles').select('mess_id').eq('id', user.id).single()).data?.mess_id)
+        supabase.from('mess_config').select('key, value').in('key', ['guest_meal_rate', 'guest_meal_types', 'is_paused', 'fines_enabled', 'penalty_skipped_duty', 'penalty_low_balance', 'minimum_required_balance', 'audit_log_retention_days']).eq('mess_id', (await supabase.from('profiles').select('mess_id').eq('id', user.id).single()).data?.mess_id)
       ])
 
       if (pRes.data?.mess_id) {
@@ -94,6 +102,18 @@ export default function MessConfigPage() {
         if (pauseConfig) {
           setIsPaused(pauseConfig.value === 'true')
         }
+
+        const finesEnabledConfig = cRes.data.find(c => c.key === 'fines_enabled')
+        const penaltySkippedConfig = cRes.data.find(c => c.key === 'penalty_skipped_duty')
+        const penaltyLowConfig = cRes.data.find(c => c.key === 'penalty_low_balance')
+        const minReqConfig = cRes.data.find(c => c.key === 'minimum_required_balance')
+        const auditLogRetentionConfig = cRes.data.find(c => c.key === 'audit_log_retention_days')
+
+        if (finesEnabledConfig) setFinesEnabled(finesEnabledConfig.value === 'true')
+        if (penaltySkippedConfig) setPenaltySkippedDuty(penaltySkippedConfig.value || '50')
+        if (penaltyLowConfig) setPenaltyLowBalance(penaltyLowConfig.value || '100')
+        if (minReqConfig) setMinRequiredBalance(minReqConfig.value || '200')
+        if (auditLogRetentionConfig) setAuditLogRetentionDays(auditLogRetentionConfig.value || '90')
 
         if (typesConfig) {
           try {
@@ -166,6 +186,36 @@ export default function MessConfigPage() {
           key: 'guest_meal_types',
           value: JSON.stringify(mealTypes),
           description: 'JSON array of guest meal types',
+          mess_id: profile.mess_id
+        }),
+        supabase.from('mess_config').upsert({
+          key: 'fines_enabled',
+          value: finesEnabled.toString(),
+          description: 'Is the fine & penalty system enabled',
+          mess_id: profile.mess_id
+        }),
+        supabase.from('mess_config').upsert({
+          key: 'penalty_skipped_duty',
+          value: penaltySkippedDuty,
+          description: 'Fine for skipping duty',
+          mess_id: profile.mess_id
+        }),
+        supabase.from('mess_config').upsert({
+          key: 'penalty_low_balance',
+          value: penaltyLowBalance,
+          description: 'Fine for low balance',
+          mess_id: profile.mess_id
+        }),
+        supabase.from('mess_config').upsert({
+          key: 'minimum_required_balance',
+          value: minRequiredBalance,
+          description: 'Threshold below which balance is low',
+          mess_id: profile.mess_id
+        }),
+        supabase.from('mess_config').upsert({
+          key: 'audit_log_retention_days',
+          value: auditLogRetentionDays || '90',
+          description: 'Days to keep audit logs before auto-deletion',
           mess_id: profile.mess_id
         })
       ]
@@ -461,6 +511,110 @@ export default function MessConfigPage() {
             </Button>
           </CardContent>
         </Card>
+
+        {/* Fine & Penalty System Card */}
+        <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm rounded-[2rem]">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-500 fill-amber-100" />
+              Fine & Penalty Settings
+            </CardTitle>
+            <CardDescription>
+              Configure manual skipped duties and automatic low balance rules.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+              <div className="space-y-0.5">
+                <p className="text-sm font-bold text-slate-800">Enable Fines & Penalties</p>
+                <p className="text-[10px] text-slate-500 font-medium max-w-[200px]">
+                  Allow manual duty skips and monthly cycle closures to assess fines.
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={finesEnabled} 
+                  onChange={(e) => setFinesEnabled(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+              </label>
+            </div>
+
+            {finesEnabled && (
+              <div className="space-y-4 animate-in slide-in-from-top-2 duration-200">
+                <div className="space-y-2">
+                  <Label htmlFor="penaltySkipped">Skipped Duty Fine (₹)</Label>
+                  <Input
+                    id="penaltySkipped"
+                    type="number"
+                    placeholder="e.g. 50"
+                    value={penaltySkippedDuty}
+                    onChange={(e) => setPenaltySkippedDuty(e.target.value)}
+                    className="h-11 bg-white"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="minBalance">Minimum Required Balance (₹)</Label>
+                  <Input
+                    id="minBalance"
+                    type="number"
+                    placeholder="e.g. 200"
+                    value={minRequiredBalance}
+                    onChange={(e) => setMinRequiredBalance(e.target.value)}
+                    className="h-11 bg-white"
+                  />
+                  <p className="text-[9px] text-slate-400 font-medium ml-1">
+                    Fine is assessed if a member falls below this after monthly deductions.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="penaltyLow">Low Balance Penalty Fine (₹)</Label>
+                  <Input
+                    id="penaltyLow"
+                    type="number"
+                    placeholder="e.g. 100"
+                    value={penaltyLowBalance}
+                    onChange={(e) => setPenaltyLowBalance(e.target.value)}
+                    className="h-11 bg-white"
+                  />
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Audit & Security Settings Card */}
+        <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm rounded-[2rem]">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Settings className="w-5 h-5 text-indigo-500" />
+              Audit & Logging Settings
+            </CardTitle>
+            <CardDescription>
+              Configure how long manager activity logs are saved.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="retentionDays">Log Retention Period (Days)</Label>
+              <Input
+                id="retentionDays"
+                type="number"
+                placeholder="e.g. 90"
+                value={auditLogRetentionDays}
+                onChange={(e) => setAuditLogRetentionDays(e.target.value)}
+                className="h-11 bg-white"
+              />
+              <p className="text-[10px] text-slate-400 font-medium ml-1">
+                Activity logs older than this will be automatically deleted to save space. Default is 90 days.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
         
         {/* 4. Handover Section (Manager Only) */}
         <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm rounded-[2rem] overflow-hidden">
@@ -501,7 +655,23 @@ export default function MessConfigPage() {
           </CardContent>
         </Card>
 
-        {/* 5. Danger Zone */}
+        {/* 5. Notification Alerts (Manager Only) */}
+        <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm rounded-[2rem] overflow-hidden">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2 text-slate-800">
+              <Bell className="w-5 h-5 text-primary" />
+              Manager Alerts
+            </CardTitle>
+            <CardDescription>
+              Choose which events you want to be notified about.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-6 pt-0">
+            <ManagerNotificationSettings />
+          </CardContent>
+        </Card>
+
+        {/* 6. Danger Zone */}
         <Card className="border-2 border-red-200 shadow-sm bg-red-50/20 rounded-[2rem] overflow-hidden">
           <CardHeader className="bg-red-50/50">
             <CardTitle className="text-lg flex items-center gap-2 text-red-800">

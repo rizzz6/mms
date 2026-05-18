@@ -7,8 +7,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2, Save, User as UserIcon, Mail, Lock, Eye, EyeOff, ChevronLeft } from 'lucide-react'
+import { Loader2, Save, User as UserIcon, Mail, Lock, Eye, EyeOff, ChevronLeft, Bell } from 'lucide-react'
 import { toast } from 'sonner'
+import PushNotificationToggle from '@/components/PushNotificationToggle'
 
 export default function AccountSettingsPage() {
   const [user, setUser] = useState<User | null>(null)
@@ -165,6 +166,21 @@ export default function AccountSettingsPage() {
             {savingProfile ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
             Update Profile
           </Button>
+        </CardContent>
+      </Card>
+
+      <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm animate-in fade-in slide-in-from-bottom-3 duration-300">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Bell className="w-5 h-5 text-primary" />
+            Notifications
+          </CardTitle>
+          <CardDescription>
+            Enable push notifications to receive real-time alerts.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <PushNotificationToggle />
         </CardContent>
       </Card>
     </div>

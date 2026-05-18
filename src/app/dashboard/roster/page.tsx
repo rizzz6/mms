@@ -6,9 +6,11 @@ import { createClient } from '@/utils/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, Calendar, ChevronLeft, ChevronRight, ShoppingBag, Droplets, AlertCircle, History, CheckCircle2, ReceiptText, Edit2, ArrowRightLeft, ListFilter, X } from 'lucide-react'
+import { Loader2, Calendar, ChevronLeft, ChevronRight, ShoppingBag, Droplets, AlertCircle, History, CheckCircle2, ReceiptText, Edit2, ArrowRightLeft, ListFilter, X, Sparkles, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { computeRoster, DayAssignment, Member, DutyRecord, AssignmentDetail } from '@/lib/roster-engine'
+import { restockInventoryItem, addCustomInventoryItem } from '@/app/actions/inventory'
+import { issuePenalty } from '@/app/actions/penalties'
 import {
   Dialog,
   DialogContent,
@@ -54,6 +56,7 @@ export default function RosterPage() {
   // const [allRecords, setAllRecords] = useState<DutyRecord[]>([])
   const [assignments, setAssignments] = useState<DayAssignment[]>([])
   const [loading, setLoading] = useState(true)
+  const [todayMeals, setTodayMeals] = useState<any[]>([])
   const [processing, setProcessing] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const [userRole, setUserRole] = useState<string>('member')
@@ -67,6 +70,43 @@ export default function RosterPage() {
   const [reassignTarget, setReassignTarget] = useState<{ date: string, type: 'bazar' | 'water', memberId: string } | null>(null)
   const [isEditingBazar, setIsEditingBazar] = useState(false)
   const [messId, setMessId] = useState<string | null>(null)
+
+  // Pantry Sync State
+  const [pantryItems, setPantryItems] = useState<any[]>([])
+  const [parsedSuggestions, setParsedSuggestions] = useState<any[]>([])
+  const [approvePantrySync, setApprovePantrySync] = useState(true)
+
+  // Fine & Penalty states
+  const [finesEnabled, setFinesEnabled] = useState(false)
+  const [skippedDutyFine, setSkippedDutyFine] = useState(50)
+  const [penalizeOnSkip, setPenalizeOnSkip] = useState(false)
+
+  // Client-side parser for bazaar description text
+  const parseClientDescription = (text: string) => {
+    if (!text) return []
+    const parsed: { name: string; quantity: number; unit: string; price: number }[] = []
+    const parts = text.split(/[,;]+/)
+    const regex = /([a-zA-Z\s]+)\s+(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?\s+(\d+(?:\.\d+)?)/
+    parts.forEach(part => {
+      const match = part.trim().match(regex)
+      if (match) {
+        const nameRaw = match[1].trim()
+        const quantity = parseFloat(match[2])
+        const unit = (match[3] || 'kg').trim()
+        const price = parseFloat(match[4])
+        const name = nameRaw.charAt(0).toUpperCase() + nameRaw.slice(1).toLowerCase()
+        if (name && !isNaN(quantity) && !isNaN(price)) {
+          parsed.push({ name, quantity, unit, price })
+        }
+      }
+    })
+    return parsed
+  }
+
+  useEffect(() => {
+    const suggestions = parseClientDescription(bazarItems)
+    setParsedSuggestions(suggestions)
+  }, [bazarItems])
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -123,6 +163,26 @@ export default function RosterPage() {
         .maybeSingle()
       
       setTodayLog(log)
+
+      // Fetch today's meals (members + guests)
+      const { data: tMeals } = await supabase
+        .from('meals')
+        .select('*')
+        .eq('mess_id', profile.mess_id)
+        .eq('date', todayStr)
+      setTodayMeals(tMeals || [])
+
+      // Fetch existing pantry items and fines configuration
+      const [pItems, cRows] = await Promise.all([
+        supabase.from('inventory_items').select('*').eq('mess_id', profile.mess_id),
+        supabase.from('mess_config').select('key, value').eq('mess_id', profile.mess_id).in('key', ['fines_enabled', 'penalty_skipped_duty'])
+      ])
+
+      setPantryItems(pItems.data || [])
+      const cMap: Record<string, string> = {}
+      cRows.data?.forEach(r => cMap[r.key] = r.value)
+      setFinesEnabled(cMap['fines_enabled'] === 'true')
+      setSkippedDutyFine(Number(cMap['penalty_skipped_duty'] || 50))
     } catch (error) {
       console.error(error)
       toast.error('Failed to load roster')
@@ -132,7 +192,6 @@ export default function RosterPage() {
   }, [supabase, weekOffset])
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void fetchData()
   }, [fetchData])
 
@@ -152,10 +211,38 @@ export default function RosterPage() {
         items: bazarItems.trim(),
         date: new Date().toISOString().split('T')[0],
         verified: false
-      })
+      }).select().single()
 
       if (error) throw error
-      toast.success('Bazar log submitted for verification!')
+
+      // Sync suggestions to pantry inventory
+      if (approvePantrySync && parsedSuggestions.length > 0) {
+        for (const sugg of parsedSuggestions) {
+          try {
+            // Find existing item case-insensitive
+            const existing = pantryItems.find(
+              pi => pi.item_name.toLowerCase() === sugg.name.toLowerCase()
+            )
+            let itemId = existing?.id
+
+            if (!itemId) {
+              // Create custom item on the fly
+              const createRes = await addCustomInventoryItem(sugg.name, 'Staple', sugg.unit, 2)
+              if (createRes.success && createRes.item) {
+                itemId = createRes.item.id
+              }
+            }
+
+            if (itemId) {
+              await restockInventoryItem(itemId, sugg.quantity)
+            }
+          } catch (err) {
+            console.error('Failed to sync to inventory:', sugg, err)
+          }
+        }
+      }
+
+      toast.success('Bazar log & pantry stocks updated!')
       setBazarAmount('')
       setBazarItems('')
       fetchData()
@@ -221,6 +308,22 @@ export default function RosterPage() {
     setProcessing(`${date}-${type}`)
     
     try {
+      // Issue fine if penalizeOnSkip is toggled
+      if (penalizeOnSkip && finesEnabled) {
+        const targetMember = assignment.member
+        const res = await issuePenalty(
+          targetMember.id,
+          'skipped_duty',
+          skippedDutyFine,
+          `Skipped ${type === 'bazar' ? 'Bazaar' : 'Water'} duty on ${date}`
+        )
+        if (res.success) {
+          toast.success(`Fined ₹${skippedDutyFine} to ${targetMember.full_name}`)
+        } else {
+          toast.error(res.error || 'Failed to apply skipped duty fine')
+        }
+      }
+
       let recordId = assignment.recordId
       if (!recordId) {
         const { data, error } = await supabase.from('duty_roster').insert({
@@ -273,6 +376,22 @@ export default function RosterPage() {
     setProcessing(`${target.date}-${target.type}`)
     
     try {
+      // Issue fine if penalizeOnSkip is toggled (only if it came from the skip dialog, which has assignment details)
+      if (skipDialogTarget && penalizeOnSkip && finesEnabled) {
+        const targetMember = skipDialogTarget.assignment.member
+        const res = await issuePenalty(
+          targetMember.id,
+          'skipped_duty',
+          skippedDutyFine,
+          `Skipped ${target.type === 'bazar' ? 'Bazaar' : 'Water'} duty on ${target.date}`
+        )
+        if (res.success) {
+          toast.success(`Fined ₹${skippedDutyFine} to ${targetMember.full_name}`)
+        } else {
+          toast.error(res.error || 'Failed to apply skipped duty fine')
+        }
+      }
+
       // 1. Delete any existing assignments for this slot to ensure clean reassignment
       // (Especially important when reassigning a cancelled duty)
       await supabase
@@ -309,6 +428,7 @@ export default function RosterPage() {
       toast.success('Duty reassigned')
       setReassignTarget(null)
       setSkipDialogTarget(null)
+      setPenalizeOnSkip(false)
       // Set follow up for the NEW member
       setFollowUpTarget({ date: target.date, type: target.type, member: newMember })
     } catch (error) {
@@ -334,7 +454,33 @@ export default function RosterPage() {
         .eq('id', todayLog.id)
 
       if (error) throw error
-      toast.success('Bazar log updated')
+
+      // Sync suggestions to pantry inventory
+      if (approvePantrySync && parsedSuggestions.length > 0) {
+        for (const sugg of parsedSuggestions) {
+          try {
+            const existing = pantryItems.find(
+              pi => pi.item_name.toLowerCase() === sugg.name.toLowerCase()
+            )
+            let itemId = existing?.id
+
+            if (!itemId) {
+              const createRes = await addCustomInventoryItem(sugg.name, 'Staple', sugg.unit, 2)
+              if (createRes.success && createRes.item) {
+                itemId = createRes.item.id
+              }
+            }
+
+            if (itemId) {
+              await restockInventoryItem(itemId, sugg.quantity)
+            }
+          } catch (err) {
+            console.error('Failed to sync to inventory:', sugg, err)
+          }
+        }
+      }
+
+      toast.success('Bazar log & pantry stocks updated!')
       setIsEditingBazar(false)
       fetchData()
     } catch (error) {
@@ -447,6 +593,94 @@ export default function RosterPage() {
 
       <div className="max-w-md mx-auto px-4 space-y-6">
 
+        {/* Today's Confirmed Eaters Card for Shopper (Option A) */}
+        {(() => {
+          const todayStrStr = new Date().toISOString().split('T')[0]
+          let confirmedLunchMembers = 0
+          let confirmedDinnerMembers = 0
+
+          members.forEach(m => {
+            if (m.is_inactive) return
+            const joinedDateStr = new Date(m.joined_at).toISOString().split('T')[0]
+            
+            // Lunch
+            const lunchOverride = todayMeals.find(me => me.user_id === m.id && me.type === 'lunch' && !me.is_guest)
+            if (lunchOverride) {
+              if (lunchOverride.status === 'eating') confirmedLunchMembers++
+            } else {
+              if (todayStrStr >= joinedDateStr) confirmedLunchMembers++
+            }
+
+            // Dinner
+            const dinnerOverride = todayMeals.find(me => me.user_id === m.id && me.type === 'dinner' && !me.is_guest)
+            if (dinnerOverride) {
+              if (dinnerOverride.status === 'eating') confirmedDinnerMembers++
+            } else {
+              if (todayStrStr >= joinedDateStr) confirmedDinnerMembers++
+            }
+          })
+
+          const todayGuests = todayMeals.filter(me => me.is_guest)
+          const confirmedLunchGuests = todayGuests.filter(me => me.type === 'lunch')
+          const confirmedDinnerGuests = todayGuests.filter(me => me.type === 'dinner')
+
+          return (
+            <Card className="border-0 shadow-lg bg-gradient-to-br from-slate-900 to-slate-800 text-white overflow-hidden">
+              <div className="bg-white/5 p-4 border-b border-white/5 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Users className="w-4 h-4 text-emerald-400" />
+                  <h3 className="text-xs font-black uppercase tracking-wider text-emerald-400">Confirmed Eaters Today</h3>
+                </div>
+                <Badge className="bg-emerald-500 hover:bg-emerald-500 text-white font-bold text-[9px] px-2 rounded-lg border-0">
+                  {confirmedLunchMembers + confirmedLunchGuests.length + confirmedDinnerMembers + confirmedDinnerGuests.length} Portions
+                </Badge>
+              </div>
+              <CardContent className="p-4 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Lunch */}
+                  <div className="bg-white/5 p-3 rounded-2xl border border-white/5 space-y-1">
+                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest leading-none">Lunch Eaters</p>
+                    <div className="flex items-baseline gap-1 mt-1">
+                      <span className="text-xl font-black text-white">{confirmedLunchMembers + confirmedLunchGuests.length}</span>
+                      <span className="text-[10px] text-slate-400">portions</span>
+                    </div>
+                    <p className="text-[9px] text-slate-500 font-medium">
+                      {confirmedLunchMembers} Members • {confirmedLunchGuests.length} Guests
+                    </p>
+                  </div>
+
+                  {/* Dinner */}
+                  <div className="bg-white/5 p-3 rounded-2xl border border-white/5 space-y-1">
+                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest leading-none">Dinner Eaters</p>
+                    <div className="flex items-baseline gap-1 mt-1">
+                      <span className="text-xl font-black text-white">{confirmedDinnerMembers + confirmedDinnerGuests.length}</span>
+                      <span className="text-[10px] text-slate-400">portions</span>
+                    </div>
+                    <p className="text-[9px] text-slate-500 font-medium">
+                      {confirmedDinnerMembers} Members • {confirmedDinnerGuests.length} Guests
+                    </p>
+                  </div>
+                </div>
+
+                {/* Guest breakdown details for the shopper */}
+                {todayGuests.length > 0 && (
+                  <div className="bg-white/5 rounded-2xl p-3 border border-white/5 space-y-2">
+                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Guest Items List</p>
+                    <div className="divide-y divide-white/5 max-h-[120px] overflow-y-auto">
+                      {todayGuests.map((g, idx) => (
+                        <div key={idx} className="flex justify-between py-1.5 text-xs text-slate-200">
+                          <span className="font-semibold">{g.guest_name || 'Guest'} <span className="text-[9px] text-slate-400 uppercase font-medium">({g.type})</span></span>
+                          <span className="text-emerald-400 font-bold">{g.guest_type || 'Standard'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )
+        })()}
+
       {/* 1. Bazaar Logging Card */}
       <div className="space-y-3">
         <div className="flex items-center gap-2 mb-1">
@@ -529,6 +763,32 @@ export default function RosterPage() {
                   className="h-20 text-sm bg-slate-50 border-0 focus-visible:ring-primary py-3"
                   placeholder="What did you buy?"
                 />
+                {parsedSuggestions.length > 0 && (
+                  <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-4 space-y-2 mt-2 animate-in slide-in-from-top-2 duration-200">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] font-black text-indigo-700 uppercase tracking-widest flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 fill-indigo-400 text-indigo-400 animate-pulse" />
+                        Pantry Restock Detections
+                      </p>
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          checked={approvePantrySync}
+                          onChange={(e) => setApprovePantrySync(e.target.checked)}
+                          className="w-3.5 h-3.5 accent-indigo-600 rounded outline-none"
+                        />
+                        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-tighter">Sync Stock</span>
+                      </label>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {parsedSuggestions.map((s, idx) => (
+                        <Badge key={idx} className="bg-indigo-100 hover:bg-indigo-100 border-0 text-indigo-700 font-bold text-[9px] h-5 rounded-lg px-2">
+                          {s.name} ({s.quantity}{s.unit}) - ₹{s.price}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
             <Button 
@@ -566,6 +826,32 @@ export default function RosterPage() {
                   className="h-20 text-sm bg-slate-50 border-0 focus-visible:ring-primary py-3"
                   placeholder="Rice, Dal, Oil, etc."
                 />
+                {parsedSuggestions.length > 0 && (
+                  <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-4 space-y-2 mt-2 animate-in slide-in-from-top-2 duration-200">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] font-black text-indigo-700 uppercase tracking-widest flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 fill-indigo-400 text-indigo-400 animate-pulse" />
+                        Pantry Restock Detections
+                      </p>
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          checked={approvePantrySync}
+                          onChange={(e) => setApprovePantrySync(e.target.checked)}
+                          className="w-3.5 h-3.5 accent-indigo-600 rounded outline-none"
+                        />
+                        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-tighter">Sync Stock</span>
+                      </label>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {parsedSuggestions.map((s, idx) => (
+                        <Badge key={idx} className="bg-indigo-100 hover:bg-indigo-100 border-0 text-indigo-700 font-bold text-[9px] h-5 rounded-lg px-2">
+                          {s.name} ({s.quantity}{s.unit}) - ₹{s.price}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex gap-2">
@@ -764,6 +1050,24 @@ export default function RosterPage() {
             </DialogDescription>
           </DialogHeader>
 
+          {finesEnabled && userRole === 'manager' && (
+            <div className="bg-amber-50/50 border border-amber-100 rounded-2xl p-4 flex items-center justify-between mt-2 animate-in slide-in-from-top-2 duration-200">
+              <div className="space-y-0.5">
+                <p className="text-xs font-bold text-slate-800">Penalize Member?</p>
+                <p className="text-[10px] text-slate-500 font-medium">Deduct a manual skip fine of ₹{skippedDutyFine} from balance</p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={penalizeOnSkip} 
+                  onChange={(e) => setPenalizeOnSkip(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
+              </label>
+            </div>
+          )}
+
           <div className="space-y-6 py-4">
             {/* Reassign Section - Visible to All */}
             <div className="space-y-3">
@@ -801,7 +1105,7 @@ export default function RosterPage() {
           </div>
 
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setSkipDialogTarget(null)} className="w-full">Go Back</Button>
+            <Button variant="ghost" onClick={() => { setSkipDialogTarget(null); setPenalizeOnSkip(false); }} className="w-full">Go Back</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

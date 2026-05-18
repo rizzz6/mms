@@ -10,6 +10,9 @@ import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { Loader2, CheckCircle2, XCircle, ExternalLink, IndianRupee, ShoppingBag, ReceiptText, ChevronRight, UserPlus, UserMinus, UserCheck } from 'lucide-react'
 import { toast } from 'sonner'
+import { Skeleton } from '@/components/ui/skeleton'
+import { motion } from 'framer-motion'
+import { AnimatedCheckmark } from '@/components/ui/animated-checkmark'
 
 // --- Types ---
 
@@ -39,6 +42,30 @@ interface PendingMember {
   email?: string
 }
 
+const containerVariants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.08
+    }
+  }
+}
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 15, scale: 0.98 },
+  show: { 
+    opacity: 1, 
+    y: 0, 
+    scale: 1,
+    transition: { 
+      type: 'spring' as const, 
+      stiffness: 120, 
+      damping: 14 
+    } 
+  }
+}
+
 // --- Main Component ---
 
 export default function ApprovalsPage() {
@@ -51,6 +78,7 @@ export default function ApprovalsPage() {
   const [pendingMembers, setPendingMembers] = useState<PendingMember[]>([])
   const [loading, setLoading] = useState(true)
   const [processing, setProcessing] = useState<string | null>(null)
+  const [completedIds, setCompletedIds] = useState<string[]>([])
 
   // Rejection State
   const [rejectTarget, setRejectTarget] = useState<PendingTransaction | null>(null)
@@ -133,7 +161,7 @@ export default function ApprovalsPage() {
         .eq('id', txn.id)
       
       if (txnError) throw txnError
-
+ 
       // 2. Fetch & Increment Balance
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
@@ -142,24 +170,30 @@ export default function ApprovalsPage() {
         .single()
       
       if (profileError) throw profileError
-
+ 
       const { error: updateError } = await supabase
         .from('profiles')
         .update({ balance: (profile?.balance || 0) + txn.amount })
         .eq('id', txn.user_id)
       
       if (updateError) throw updateError
-
+ 
       toast.success(`Approved ₹${txn.amount} for ${txn.profiles.full_name}`)
+      
+      // Satisfying checkmark feedback delay
+      setCompletedIds(prev => [...prev, txn.id])
+      await new Promise(resolve => setTimeout(resolve, 800))
+      
       fetchData()
     } catch (error) {
       if (error instanceof Error) toast.error(error.message)
       else toast.error(String(error))
     } finally {
       setProcessing(null)
+      setCompletedIds(prev => prev.filter(id => id !== txn.id))
     }
   }
-
+ 
   const handleReject = async () => {
     if (!rejectTarget) return
     setProcessing(rejectTarget.id)
@@ -170,7 +204,7 @@ export default function ApprovalsPage() {
         .eq('id', rejectTarget.id)
       
       if (error) throw error
-
+ 
       toast.success('Payment rejected')
       setRejectTarget(null)
       fetchData()
@@ -181,7 +215,7 @@ export default function ApprovalsPage() {
       setProcessing(null)
     }
   }
-
+ 
   const handleVerifyBazar = async (log: PendingBazarLog) => {
     setProcessing(log.id)
     try {
@@ -191,17 +225,23 @@ export default function ApprovalsPage() {
         .eq('id', log.id)
       
       if (error) throw error
-
+ 
       toast.success(`Bazar entry verified`)
+      
+      // Satisfying checkmark feedback delay
+      setCompletedIds(prev => [...prev, log.id])
+      await new Promise(resolve => setTimeout(resolve, 800))
+      
       fetchData()
     } catch (error) {
       if (error instanceof Error) toast.error(error.message)
       else toast.error(String(error))
     } finally {
       setProcessing(null)
+      setCompletedIds(prev => prev.filter(id => id !== log.id))
     }
   }
-
+ 
   const handleMemberAction = async (memberId: string, action: 'approved' | 'rejected') => {
     setProcessing(memberId)
     try {
@@ -212,6 +252,7 @@ export default function ApprovalsPage() {
           .eq('id', memberId)
         if (error) throw error
         toast.success('Member request denied')
+        fetchData()
       } else {
         const { error } = await supabase
           .from('profiles')
@@ -219,7 +260,99 @@ export default function ApprovalsPage() {
           .eq('id', memberId)
         if (error) throw error
         toast.success('Member approved!')
+        
+        // Satisfying checkmark feedback delay
+        setCompletedIds(prev => [...prev, memberId])
+        await new Promise(resolve => setTimeout(resolve, 800))
+        
+        fetchData()
       }
+    } catch (error) {
+      if (error instanceof Error) toast.error(error.message)
+      else toast.error(String(error))
+    } finally {
+      setProcessing(null)
+      setCompletedIds(prev => prev.filter(id => id !== memberId))
+    }
+  }
+
+  const handleApproveAllPayments = async () => {
+    if (transactions.length === 0) return
+    setProcessing('bulk-payments')
+    let successCount = 0
+    try {
+      for (const txn of transactions) {
+        // 1. Update Transaction Status
+        const { error: txnError } = await supabase
+          .from('transactions')
+          .update({ status: 'approved' })
+          .eq('id', txn.id)
+        
+        if (txnError) throw txnError
+
+        // 2. Fetch & Increment Balance
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('balance')
+          .eq('id', txn.user_id)
+          .single()
+        
+        if (profileError) throw profileError
+
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({ balance: (profile?.balance || 0) + txn.amount })
+          .eq('id', txn.user_id)
+        
+        if (updateError) throw updateError
+        successCount++
+      }
+      toast.success(`Successfully approved all ${successCount} payments!`)
+      fetchData()
+    } catch (error) {
+      if (error instanceof Error) toast.error(`Error after approving ${successCount} items: ${error.message}`)
+      else toast.error(String(error))
+      fetchData()
+    } finally {
+      setProcessing(null)
+    }
+  }
+
+  const handleVerifyAllBazar = async () => {
+    if (bazarLogs.length === 0) return
+    setProcessing('bulk-bazar')
+    try {
+      const logIds = bazarLogs.map(l => l.id)
+      const { error } = await supabase
+        .from('bazar_logs')
+        .update({ verified: true })
+        .in('id', logIds)
+      
+      if (error) throw error
+
+      toast.success(`Successfully verified all ${bazarLogs.length} bazaar entries!`)
+      fetchData()
+    } catch (error) {
+      if (error instanceof Error) toast.error(error.message)
+      else toast.error(String(error))
+    } finally {
+      setProcessing(null)
+    }
+  }
+
+  const handleApproveAllMembers = async () => {
+    if (pendingMembers.length === 0) return
+    setProcessing('bulk-members')
+    try {
+      const memberIds = pendingMembers.map(m => m.id)
+      const { error } = await supabase
+        .from('profiles')
+        .update({ status: 'approved' })
+        .in('id', memberIds)
+      
+      if (error) throw error
+
+      toast.success(`Successfully approved all ${pendingMembers.length} members!`)
       fetchData()
     } catch (error) {
       if (error instanceof Error) toast.error(error.message)
@@ -308,18 +441,84 @@ export default function ApprovalsPage() {
           </button>
         </div>
 
+        {/* Bulk action buttons at the top of the list if items are present and not loading */}
+        {!loading && (
+          <div className="mb-2">
+            {activeTab === 'payments' && transactions.length > 0 && (
+              <Button
+                onClick={handleApproveAllPayments}
+                disabled={processing !== null}
+                className="w-full h-11 rounded-2xl bg-green-600 hover:bg-green-700 text-[10px] font-black uppercase tracking-widest gap-2 shadow-lg shadow-green-200 active:scale-95 transition-all text-white flex items-center justify-center"
+              >
+                {processing === 'bulk-payments' ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
+                ) : (
+                  <>Approve All Payments ({transactions.length})</>
+                )}
+              </Button>
+            )}
+            {activeTab === 'bazar' && bazarLogs.length > 0 && (
+              <Button
+                onClick={handleVerifyAllBazar}
+                disabled={processing !== null}
+                className="w-full h-11 rounded-2xl bg-primary hover:bg-primary/95 text-[10px] font-black uppercase tracking-widest gap-2 shadow-lg shadow-primary/20 active:scale-95 transition-all text-white flex items-center justify-center"
+              >
+                {processing === 'bulk-bazar' ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
+                ) : (
+                  <>Verify All Bazar Entries ({bazarLogs.length})</>
+                )}
+              </Button>
+            )}
+            {activeTab === 'members' && pendingMembers.length > 0 && (
+              <Button
+                onClick={handleApproveAllMembers}
+                disabled={processing !== null}
+                className="w-full h-11 rounded-2xl bg-primary hover:bg-primary/95 text-[10px] font-black uppercase tracking-widest gap-2 shadow-lg shadow-primary/20 active:scale-95 transition-all text-white flex items-center justify-center"
+              >
+                {processing === 'bulk-members' ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
+                ) : (
+                  <>Approve All Members ({pendingMembers.length})</>
+                )}
+              </Button>
+            )}
+          </div>
+        )}
+
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-24 space-y-4">
-            <div className="relative">
-              <div className="w-12 h-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <CheckCircle2 className="w-4 h-4 text-primary" />
-              </div>
-            </div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Loading requests...</p>
+          <div className="space-y-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Card key={i} className="border-0 shadow-xl shadow-slate-200/50 rounded-[2rem] p-6 space-y-6 bg-white">
+                <div className="flex justify-between items-start">
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="w-12 h-12 rounded-2xl" />
+                    <div className="space-y-2">
+                      <Skeleton className="h-4 w-32" />
+                      <Skeleton className="h-3 w-20" />
+                    </div>
+                  </div>
+                  <div className="space-y-2 text-right">
+                    <Skeleton className="h-6 w-16" />
+                    <Skeleton className="h-3.5 w-12 rounded-lg" />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Skeleton className="h-12 flex-1 rounded-xl" />
+                  <Skeleton className="h-12 w-12 rounded-xl" />
+                  <Skeleton className="h-12 flex-1 rounded-xl" />
+                </div>
+              </Card>
+            ))}
           </div>
         ) : (
-          <div className="space-y-4">
+          <motion.div 
+            key={activeTab}
+            variants={containerVariants}
+            initial="hidden"
+            animate="show"
+            className="space-y-4"
+          >
             {activeTab === 'payments' ? (
               <>
                 {transactions.length === 0 ? (
@@ -331,54 +530,62 @@ export default function ApprovalsPage() {
                   </div>
                 ) : (
                   transactions.map((txn) => (
-                    <Card key={txn.id} className="border-0 shadow-xl shadow-slate-200/50 rounded-[2rem] overflow-hidden group active:scale-[0.98] transition-all">
-                      <div className="p-6 space-y-6">
-                        <div className="flex justify-between items-start">
-                          <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 font-black text-xl">
-                              {txn.profiles.full_name.charAt(0)}
+                    <motion.div key={txn.id} variants={cardVariants}>
+                      <Card className="border-0 shadow-xl shadow-slate-200/50 rounded-[2rem] overflow-hidden group active:scale-[0.98] transition-all">
+                        <div className="p-6 space-y-6">
+                          <div className="flex justify-between items-start">
+                            <div className="flex items-center gap-3">
+                              <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 font-black text-xl">
+                                {txn.profiles.full_name.charAt(0)}
+                              </div>
+                              <div>
+                                <p className="text-sm font-black text-slate-800">{txn.profiles.full_name}</p>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">
+                                  {new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(txn.created_at))}
+                                </p>
+                              </div>
                             </div>
-                            <div>
-                              <p className="text-sm font-black text-slate-800">{txn.profiles.full_name}</p>
-                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">
-                                {new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(txn.created_at))}
-                              </p>
+                            <div className="text-right">
+                              <p className="text-2xl font-black text-primary">₹{txn.amount}</p>
+                              <Badge variant="outline" className="text-[9px] font-black tracking-tighter bg-slate-50 border-slate-100">
+                                ID: {txn.txn_id?.slice(-6) || 'N/A'}
+                              </Badge>
                             </div>
                           </div>
-                          <div className="text-right">
-                            <p className="text-2xl font-black text-primary">₹{txn.amount}</p>
-                            <Badge variant="outline" className="text-[9px] font-black tracking-tighter bg-slate-50 border-slate-100">
-                              ID: {txn.txn_id?.slice(-6) || 'N/A'}
-                            </Badge>
+   
+                          <div className="flex gap-2">
+                            {txn.proof_url && (
+                              <a href={txn.proof_url} target="_blank" rel="noreferrer" className="flex-1">
+                                <Button variant="outline" className="w-full h-12 rounded-xl text-[10px] font-black uppercase tracking-widest gap-2 bg-slate-50 hover:bg-slate-100 border-slate-200">
+                                  <ExternalLink className="w-3.5 h-3.5" /> View Proof
+                                </Button>
+                              </a>
+                            )}
+                            <Button 
+                              variant="ghost" 
+                              className="w-12 h-12 rounded-xl text-red-500 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-100"
+                              onClick={() => setRejectTarget(txn)}
+                              disabled={processing !== null}
+                            >
+                              <XCircle className="w-5 h-5" />
+                            </Button>
+                            <Button 
+                              className="flex-1 h-12 rounded-xl text-[10px] font-black uppercase tracking-widest bg-green-600 hover:bg-green-700 shadow-lg shadow-green-200 active:scale-95 transition-all text-white flex items-center justify-center gap-1.5"
+                              onClick={() => handleApprove(txn)}
+                              disabled={processing !== null}
+                            >
+                              {completedIds.includes(txn.id) ? (
+                                <AnimatedCheckmark className="w-4 h-4 text-white" />
+                              ) : processing === txn.id ? (
+                                <Loader2 className="w-4 h-4 animate-spin text-white" />
+                              ) : (
+                                "Approve Now"
+                              )}
+                            </Button>
                           </div>
                         </div>
-
-                        <div className="flex gap-2">
-                          {txn.proof_url && (
-                            <a href={txn.proof_url} target="_blank" rel="noreferrer" className="flex-1">
-                              <Button variant="outline" className="w-full h-12 rounded-xl text-[10px] font-black uppercase tracking-widest gap-2 bg-slate-50 hover:bg-slate-100 border-slate-200">
-                                <ExternalLink className="w-3.5 h-3.5" /> View Proof
-                              </Button>
-                            </a>
-                          )}
-                          <Button 
-                            variant="ghost" 
-                            className="w-12 h-12 rounded-xl text-red-500 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-100"
-                            onClick={() => setRejectTarget(txn)}
-                            disabled={processing === txn.id}
-                          >
-                            <XCircle className="w-5 h-5" />
-                          </Button>
-                          <Button 
-                            className="flex-1 h-12 rounded-xl text-[10px] font-black uppercase tracking-widest bg-green-600 hover:bg-green-700 shadow-lg shadow-green-200 active:scale-95 transition-all"
-                            onClick={() => handleApprove(txn)}
-                            disabled={processing === txn.id}
-                          >
-                            {processing === txn.id ? <Loader2 className="w-4 h-4 animate-spin" /> : "Approve Now"}
-                          </Button>
-                        </div>
-                      </div>
-                    </Card>
+                      </Card>
+                    </motion.div>
                   ))
                 )}
               </>
@@ -393,39 +600,47 @@ export default function ApprovalsPage() {
                   </div>
                 ) : (
                   bazarLogs.map((log) => (
-                    <Card key={log.id} className="border-0 shadow-xl shadow-slate-200/50 rounded-[2rem] overflow-hidden">
-                      <div className="p-6 space-y-6">
-                        <div className="flex justify-between items-start">
-                          <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 rounded-2xl bg-orange-50 flex items-center justify-center text-orange-600 font-black text-xl">
-                              {log.profiles.full_name.charAt(0)}
+                    <motion.div key={log.id} variants={cardVariants}>
+                      <Card className="border-0 shadow-xl shadow-slate-200/50 rounded-[2rem] overflow-hidden">
+                        <div className="p-6 space-y-6">
+                          <div className="flex justify-between items-start">
+                            <div className="flex items-center gap-3">
+                              <div className="w-12 h-12 rounded-2xl bg-orange-50 flex items-center justify-center text-orange-600 font-black text-xl">
+                                {log.profiles.full_name.charAt(0)}
+                              </div>
+                              <div>
+                                <p className="text-sm font-black text-slate-800">{log.profiles.full_name}</p>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">
+                                  {new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short' }).format(new Date(log.date))}
+                                </p>
+                              </div>
                             </div>
-                            <div>
-                              <p className="text-sm font-black text-slate-800">{log.profiles.full_name}</p>
-                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">
-                                {new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short' }).format(new Date(log.date))}
-                              </p>
-                            </div>
+                            <p className="text-2xl font-black text-orange-600">₹{log.amount}</p>
                           </div>
-                          <p className="text-2xl font-black text-orange-600">₹{log.amount}</p>
+   
+                          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Purchased Items</p>
+                            <p className="text-xs font-bold text-slate-600 leading-relaxed">
+                              {log.items}
+                            </p>
+                          </div>
+   
+                          <Button 
+                            className="w-full h-12 rounded-xl text-[10px] font-black uppercase tracking-widest bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20 active:scale-95 transition-all gap-2 text-white flex items-center justify-center" 
+                            onClick={() => handleVerifyBazar(log)}
+                            disabled={processing !== null}
+                          >
+                            {completedIds.includes(log.id) ? (
+                              <AnimatedCheckmark className="w-4 h-4 text-white" />
+                            ) : processing === log.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin text-white" />
+                            ) : (
+                              <><CheckCircle2 className="w-4 h-4" /> Verify Entry</>
+                            )}
+                          </Button>
                         </div>
-
-                        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Purchased Items</p>
-                          <p className="text-xs font-bold text-slate-600 leading-relaxed">
-                            {log.items}
-                          </p>
-                        </div>
-
-                        <Button 
-                          className="w-full h-12 rounded-xl text-[10px] font-black uppercase tracking-widest bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20 active:scale-95 transition-all gap-2" 
-                          onClick={() => handleVerifyBazar(log)}
-                          disabled={processing === log.id}
-                        >
-                          {processing === log.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <><CheckCircle2 className="w-4 h-4" /> Verify Entry</>}
-                        </Button>
-                      </div>
-                    </Card>
+                      </Card>
+                    </motion.div>
                   ))
                 )}
               </>
@@ -440,44 +655,52 @@ export default function ApprovalsPage() {
                   </div>
                 ) : (
                   pendingMembers.map((member) => (
-                    <Card key={member.id} className="border-0 shadow-xl shadow-slate-200/50 rounded-[2rem] overflow-hidden">
-                      <div className="p-6 space-y-6">
-                        <div className="flex items-center gap-4">
-                          <div className="w-16 h-16 rounded-[1.5rem] bg-blue-50 flex items-center justify-center text-blue-600 font-black text-2xl border border-blue-100 shadow-inner">
-                            {member.full_name.charAt(0)}
+                    <motion.div key={member.id} variants={cardVariants}>
+                      <Card className="border-0 shadow-xl shadow-slate-200/50 rounded-[2rem] overflow-hidden">
+                        <div className="p-6 space-y-6">
+                          <div className="flex items-center gap-4">
+                            <div className="w-16 h-16 rounded-[1.5rem] bg-blue-50 flex items-center justify-center text-blue-600 font-black text-2xl border border-blue-100 shadow-inner">
+                              {member.full_name.charAt(0)}
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-lg font-black text-slate-800 leading-tight">{member.full_name}</p>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                                Requested {new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short' }).format(new Date(member.joined_at))}
+                              </p>
+                            </div>
                           </div>
-                          <div className="flex-1">
-                            <p className="text-lg font-black text-slate-800 leading-tight">{member.full_name}</p>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
-                              Requested {new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short' }).format(new Date(member.joined_at))}
-                            </p>
+   
+                          <div className="flex gap-3">
+                            <Button 
+                              variant="ghost" 
+                              className="flex-1 h-12 rounded-xl text-[10px] font-black uppercase tracking-widest text-red-500 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-100"
+                              onClick={() => handleMemberAction(member.id, 'rejected')}
+                              disabled={processing !== null}
+                            >
+                              <UserMinus className="w-4 h-4 mr-2" /> Deny
+                            </Button>
+                            <Button 
+                              className="flex-[1.5] h-12 rounded-xl text-[10px] font-black uppercase tracking-widest bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20 active:scale-95 transition-all flex gap-2 text-white justify-center items-center"
+                              onClick={() => handleMemberAction(member.id, 'approved')}
+                              disabled={processing !== null}
+                            >
+                              {completedIds.includes(member.id) ? (
+                                <AnimatedCheckmark className="w-4 h-4 text-white" />
+                              ) : processing === member.id ? (
+                                <Loader2 className="w-4 h-4 animate-spin text-white" />
+                              ) : (
+                                <><UserCheck className="w-4 h-4" /> Approve Member</>
+                              )}
+                            </Button>
                           </div>
                         </div>
-
-                        <div className="flex gap-3">
-                          <Button 
-                            variant="ghost" 
-                            className="flex-1 h-12 rounded-xl text-[10px] font-black uppercase tracking-widest text-red-500 hover:text-red-600 hover:bg-red-50 border border-transparent hover:border-red-100"
-                            onClick={() => handleMemberAction(member.id, 'rejected')}
-                            disabled={processing === member.id}
-                          >
-                            <UserMinus className="w-4 h-4 mr-2" /> Deny
-                          </Button>
-                          <Button 
-                            className="flex-[1.5] h-12 rounded-xl text-[10px] font-black uppercase tracking-widest bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20 active:scale-95 transition-all flex gap-2"
-                            onClick={() => handleMemberAction(member.id, 'approved')}
-                            disabled={processing === member.id}
-                          >
-                            {processing === member.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <><UserCheck className="w-4 h-4" /> Approve Member</>}
-                          </Button>
-                        </div>
-                      </div>
-                    </Card>
+                      </Card>
+                    </motion.div>
                   ))
                 )}
               </>
             )}
-          </div>
+          </motion.div>
         )}
       </div>
 

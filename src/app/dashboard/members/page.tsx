@@ -50,7 +50,8 @@ export default function MembersList() {
       setMyRole(profile?.role || null)
       // const myId = profile?.id
 
-      if (profile?.role !== 'manager' || !profile?.mess_id) {
+      const allowedRoles = ['manager', 'co_manager']
+      if (!profile || !allowedRoles.includes(profile.role) || !profile?.mess_id) {
         setLoading(false)
         return
       }
@@ -104,6 +105,26 @@ export default function MembersList() {
     setIsProcessing(false)
   }
 
+  const handleToggleCoManager = async (memberId: string, currentRole: string) => {
+    setIsProcessing(true)
+    const newRole = currentRole === 'co_manager' ? 'member' : 'co_manager'
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ role: newRole })
+        .eq('id', memberId)
+      
+      if (error) throw error
+      
+      toast.success(newRole === 'co_manager' ? 'Member promoted to Co-Manager!' : 'Co-Manager demoted to Member!')
+      setMembers(members.map(m => m.id === memberId ? { ...m, role: newRole } : m))
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update member role')
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
   const handleRemoveMember = async (id: string) => {
     setIsProcessing(true)
     const { error } = await supabase
@@ -121,10 +142,7 @@ export default function MembersList() {
     setIsProcessing(false)
   }
 
-  const [currentUser, setCurrentUser] = useState<string | null>(null)
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setCurrentUser(data.user?.id || null))
-  }, [supabase])
+
 
   const toggleInactive = async (memberId: string, currentStatus: boolean) => {
     setIsProcessing(true)
@@ -150,12 +168,13 @@ export default function MembersList() {
     )
   }
 
-  if (myRole !== 'manager') {
+  const allowedRoles = ['manager', 'co_manager']
+  if (!allowedRoles.includes(myRole || '')) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4 text-center">
         <Shield className="w-12 h-12 text-slate-300 mb-4" />
         <h1 className="text-xl font-bold text-slate-800">Access Denied</h1>
-        <p className="text-sm text-slate-500 max-w-xs">This page is restricted to Mess Managers only.</p>
+        <p className="text-sm text-slate-500 max-w-xs">This page is restricted to Managers or Co-Managers only.</p>
         <Button className="mt-6" onClick={() => window.location.href = '/dashboard'}>Go Back</Button>
       </div>
     )
@@ -203,14 +222,17 @@ export default function MembersList() {
           <Card key={member.id} className="border-0 shadow-sm bg-white overflow-hidden active:scale-[0.98] transition-transform">
             <CardContent className="p-4">
               <div className="flex items-start gap-4">
-                <div className={`p-3 rounded-2xl shrink-0 ${member.role === 'manager' ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-slate-100 text-slate-500'}`}>
-                  {member.role === 'manager' ? <ShieldCheck className="w-6 h-6" /> : <User className="w-6 h-6" />}
+                <div className={`p-3 rounded-2xl shrink-0 ${member.role === 'manager' ? 'bg-primary text-white shadow-lg shadow-primary/20' : member.role === 'co_manager' ? 'bg-purple-100 text-purple-600' : 'bg-slate-100 text-slate-500'}`}>
+                  {member.role === 'manager' ? <ShieldCheck className="w-6 h-6" /> : member.role === 'co_manager' ? <ShieldCheck className="w-6 h-6 text-purple-600" /> : <User className="w-6 h-6" />}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <h3 className="font-bold text-slate-800 truncate">{member.full_name}</h3>
                     {member.role === 'manager' && (
                       <Badge variant="default" className="text-[9px] h-4 px-1 font-black bg-slate-900">MANAGER</Badge>
+                    )}
+                    {member.role === 'co_manager' && (
+                      <Badge variant="default" className="text-[9px] h-4 px-1.5 font-black bg-purple-600 text-white hover:bg-purple-700">CO-MANAGER</Badge>
                     )}
                     {member.is_inactive && (
                       <Badge variant="outline" className="text-[9px] h-4 px-1 font-black border-orange-500 text-orange-600 bg-orange-50 uppercase">ABSENT</Badge>
@@ -269,17 +291,32 @@ export default function MembersList() {
                     size="sm" 
                     className={`h-8 px-3 rounded-lg text-[11px] font-bold gap-1.5 border-slate-200 ${member.is_inactive ? 'bg-orange-50 text-orange-600 border-orange-100' : ''}`}
                     onClick={() => toggleInactive(member.id, !!member.is_inactive)}
-                    disabled={isProcessing || (myRole !== 'manager' && currentUser !== member.id)}
+                    disabled={isProcessing}
                   >
                     {member.is_inactive ? 'Mark Active' : 'Mark Absent'}
                   </Button>
+
+                  {myRole === 'manager' && member.role !== 'manager' && (
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className={`h-8 px-2.5 rounded-lg text-[10px] font-bold border-slate-200 ${
+                        member.role === 'co_manager' ? 'text-red-600 hover:bg-red-50 border-red-100' : 'text-purple-600 hover:bg-purple-50 border-purple-100'
+                      }`}
+                      onClick={() => handleToggleCoManager(member.id, member.role)}
+                      disabled={isProcessing}
+                    >
+                      {member.role === 'co_manager' ? 'Demote' : 'Promote'}
+                    </Button>
+                  )}
                   
-                  {myRole === 'manager' && (
+                  {myRole === 'manager' && member.role !== 'manager' && (
                     <Button 
                       variant="ghost" 
                       size="icon" 
                       className="h-8 w-8 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50"
                       onClick={() => setShowDeleteConfirm(member.id)}
+                      disabled={isProcessing}
                     >
                       <Trash2 className="w-4 h-4" />
                     </Button>

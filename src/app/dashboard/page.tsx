@@ -2,10 +2,12 @@ import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
-import { User, CreditCard, Settings, UtensilsCrossed, ChevronRight, CheckCircle2, TrendingUp, Utensils, Users, Receipt, TriangleAlert, AlertCircle, ShoppingBag } from 'lucide-react'
+import { User, CreditCard, Settings, UtensilsCrossed, ChevronRight, CheckCircle2, TrendingUp, Utensils, Users, Receipt, TriangleAlert, AlertCircle, ShoppingBag, Megaphone, History } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { computeRoster, Member, DutyRecord } from '@/lib/roster-engine'
 import { LogoutButton } from '@/components/LogoutButton'
+import ActiveEngagementFeed from '@/components/ActiveEngagementFeed'
+import ManagerCharts from '@/components/ManagerCharts'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -73,6 +75,12 @@ export default async function DashboardPage() {
   // Fetch data for calculations (Filtered by mess_id)
   const now = new Date()
   const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+  const todayDateStr = now.toISOString().split('T')[0]
+
+  // Calculate 90 days ago for chart data
+  const ninetyDaysAgo = new Date()
+  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90)
+  const ninetyDaysAgoStart = ninetyDaysAgo.toISOString().split('T')[0]
 
   const [
     { data: configRows },
@@ -81,31 +89,52 @@ export default async function DashboardPage() {
     { count: pendingCountResult },
     { data: membersData },
     { data: rosterData },
-    { data: messData }
+    { data: messData },
+    { data: announcementsData },
+    { data: menuData },
+    { data: pollsData },
+    { data: chartBazarLogs }
   ] = await Promise.all([
     supabase.from('mess_config').select('key, value').eq('mess_id', profile.mess_id),
     supabase.from('meals').select('*', { count: 'exact', head: true }).eq('mess_id', profile.mess_id).eq('is_guest', true).gte('date', monthStart),
     supabase.from('bazar_logs').select('amount').eq('mess_id', profile.mess_id).eq('verified', true).gte('date', monthStart),
-    profile?.role === 'manager' 
+    (profile?.role === 'manager' || profile?.role === 'co_manager') 
       ? supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('mess_id', profile.mess_id).eq('status', 'pending')
       : Promise.resolve({ count: 0 }),
-    supabase.from('profiles').select('id, full_name, joined_at').eq('mess_id', profile.mess_id).eq('status', 'approved').order('joined_at'),
+    supabase.from('profiles').select('id, full_name, joined_at, is_inactive, inactive_until').eq('mess_id', profile.mess_id).eq('status', 'approved').order('joined_at'),
     supabase.from('duty_roster').select('*').eq('mess_id', profile.mess_id).order('date'),
-    supabase.from('messes').select('created_at').eq('id', profile.mess_id).single()
+    supabase.from('messes').select('created_at').eq('id', profile.mess_id).single(),
+    supabase.from('announcements').select('*').eq('mess_id', profile.mess_id).eq('pinned', true).order('created_at', { ascending: false }),
+    supabase.from('daily_menus').select('*').eq('mess_id', profile.mess_id).eq('date', todayDateStr).maybeSingle(),
+    supabase.from('polls').select('*, poll_options(*), poll_votes(*, profiles(full_name))').eq('mess_id', profile.mess_id).eq('is_closed', false).order('created_at', { ascending: false }),
+    supabase.from('bazar_logs').select('amount, date').eq('mess_id', profile.mess_id).eq('verified', true).gte('date', ninetyDaysAgoStart)
   ])
 
-  // Fetch explicit meal overrides
+  // Filter out expired polls in JS to ensure timezone reliability
+  const activePolls = (pollsData || []).filter(p => {
+    if (!p.expires_at) return true
+    return new Date(p.expires_at) > new Date()
+  })
+
+  // Fetch explicit meal overrides for the last 90 days to populate both calculations and charts
   const { data: mealOverrides } = await supabase
     .from('meals')
     .select('*')
     .eq('mess_id', profile.mess_id)
     .eq('is_guest', false)
-    .gte('date', monthStart)
+    .gte('date', ninetyDaysAgoStart)
 
   const overrideMap: Record<string, string> = {}
   mealOverrides?.forEach(m => {
     overrideMap[`${m.user_id}-${m.date}-${m.type}`] = m.status
   })
+
+  // Fetch today's meals (members + guests) for confirmed eater stats
+  const { data: todayMeals } = await supabase
+    .from('meals')
+    .select('*')
+    .eq('mess_id', profile.mess_id)
+    .eq('date', todayDateStr)
 
   // Calculate total member meals accurately
   let totalMemberMeals = 0
@@ -193,6 +222,95 @@ export default async function DashboardPage() {
           </div>
         )}
 
+        {(() => {
+          const isTodayShopper = todayDuty?.bazar?.member.id === profile.id && !todayDuty?.bazar?.isSkipped && !todayDuty?.bazar?.isCancelled
+          if (!isTodayShopper) return null
+
+          let confirmedLunchMembers = 0
+          let confirmedDinnerMembers = 0
+
+          membersData?.forEach(m => {
+            if ((m as any).is_inactive) return
+            const joinedDateStr = new Date(m.joined_at).toISOString().split('T')[0]
+            
+            // Lunch
+            const lunchOverride = todayMeals?.find(me => me.user_id === m.id && me.type === 'lunch' && !me.is_guest)
+            if (lunchOverride) {
+              if (lunchOverride.status === 'eating') confirmedLunchMembers++
+            } else {
+              if (todayDateStr >= joinedDateStr) confirmedLunchMembers++
+            }
+
+            // Dinner
+            const dinnerOverride = todayMeals?.find(me => me.user_id === m.id && me.type === 'dinner' && !me.is_guest)
+            if (dinnerOverride) {
+              if (dinnerOverride.status === 'eating') confirmedDinnerMembers++
+            } else {
+              if (todayDateStr >= joinedDateStr) confirmedDinnerMembers++
+            }
+          })
+
+          const todayGuests = todayMeals?.filter(me => me.is_guest) || []
+          const confirmedLunchGuests = todayGuests.filter(me => me.type === 'lunch')
+          const confirmedDinnerGuests = todayGuests.filter(me => me.type === 'dinner')
+
+          return (
+            <Card className="border-0 shadow-lg bg-gradient-to-br from-slate-900 to-slate-800 text-white overflow-hidden rounded-[2rem]">
+              <div className="bg-white/5 p-4 border-b border-white/5 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ShoppingBag className="w-4 h-4 text-emerald-400" />
+                  <h3 className="text-xs font-black uppercase tracking-wider text-emerald-400">Your Confirmed Eaters Sheet</h3>
+                </div>
+                <Badge className="bg-emerald-500 hover:bg-emerald-500 text-white font-bold text-[9px] px-2 rounded-lg border-0">
+                  Shopper View
+                </Badge>
+              </div>
+              <CardContent className="p-5 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Lunch */}
+                  <div className="bg-white/5 p-3 rounded-2xl border border-white/5 space-y-1">
+                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest leading-none">Lunch</p>
+                    <div className="flex items-baseline gap-1 mt-1">
+                      <span className="text-xl font-black text-white">{confirmedLunchMembers + confirmedLunchGuests.length}</span>
+                      <span className="text-[10px] text-slate-400">portions</span>
+                    </div>
+                    <p className="text-[9px] text-slate-500 font-medium">
+                      {confirmedLunchMembers} Members • {confirmedLunchGuests.length} Guests
+                    </p>
+                  </div>
+
+                  {/* Dinner */}
+                  <div className="bg-white/5 p-3 rounded-2xl border border-white/5 space-y-1">
+                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest leading-none">Dinner</p>
+                    <div className="flex items-baseline gap-1 mt-1">
+                      <span className="text-xl font-black text-white">{confirmedDinnerMembers + confirmedDinnerGuests.length}</span>
+                      <span className="text-[10px] text-slate-400">portions</span>
+                    </div>
+                    <p className="text-[9px] text-slate-500 font-medium">
+                      {confirmedDinnerMembers} Members • {confirmedDinnerGuests.length} Guests
+                    </p>
+                  </div>
+                </div>
+
+                {/* Guest breakdown details for the shopper */}
+                {todayGuests.length > 0 && (
+                  <div className="bg-white/5 rounded-2xl p-3 border border-white/5 space-y-2">
+                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Guest Items List</p>
+                    <div className="divide-y divide-white/5 max-h-[120px] overflow-y-auto">
+                      {todayGuests.map((g, idx) => (
+                        <div key={idx} className="flex justify-between py-1.5 text-xs text-slate-200">
+                          <span className="font-semibold">{g.guest_name || 'Guest'} <span className="text-[9px] text-slate-400 uppercase font-medium">({g.type})</span></span>
+                          <span className="text-emerald-400 font-bold">{g.guest_type || 'Standard'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )
+        })()}
+
         <Card className="border-0 shadow-xl overflow-hidden bg-primary text-white relative rounded-[2.5rem]">
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32 blur-3xl" />
           <div className="absolute bottom-0 left-0 w-48 h-48 bg-blue-400/10 rounded-full -ml-24 -mb-24 blur-3xl" />
@@ -215,7 +333,9 @@ export default async function DashboardPage() {
               </div>
               <div className="bg-white/10 rounded-2xl p-4 backdrop-blur-md border border-white/20 flex flex-col justify-center shadow-sm">
                 <p className="text-white/60 text-[8px] font-black uppercase tracking-widest mb-1.5">Role</p>
-                <h3 className="text-[10px] font-black uppercase tracking-tight leading-none truncate">{profile?.role}</h3>
+                <h3 className="text-[10px] font-black uppercase tracking-tight leading-none truncate">
+                  {profile?.role === 'co_manager' ? 'Co-Manager' : profile?.role === 'manager' ? 'Manager' : 'Member'}
+                </h3>
               </div>
               <div className="bg-white/10 rounded-2xl p-4 backdrop-blur-md border border-white/20 flex flex-col justify-center shadow-sm">
                 <p className="text-white/60 text-[8px] font-black uppercase tracking-widest mb-1.5">Status</p>
@@ -229,6 +349,14 @@ export default async function DashboardPage() {
             </div>
           </div>
         </Card>
+
+        {/* Active Pinned Announcements, Culinary Menus, and Active Polls */}
+        <ActiveEngagementFeed 
+          announcements={announcementsData || []}
+          menu={menuData || null}
+          polls={activePolls || []}
+          userId={user.id}
+        />
 
         {/* Action Grid */}
         <div className="grid grid-cols-2 gap-3">
@@ -259,6 +387,23 @@ export default async function DashboardPage() {
             </Card>
           </a>
 
+          <a href="/dashboard/inventory" className="col-span-2">
+            <Card className="border-0 shadow-sm hover:shadow-md transition-all active:scale-95 cursor-pointer bg-emerald-50/30 border border-emerald-100/50">
+              <CardContent className="p-3 px-6 flex items-center justify-between text-left space-x-4">
+                <div className="flex items-center space-x-4">
+                  <div className="bg-emerald-100 p-3 rounded-2xl text-emerald-600">
+                    <ShoppingBag className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-slate-700">Pantry & Stock Inventory</p>
+                    <p className="text-[10px] text-slate-500 font-medium">Track staples, oil & predictive runouts</p>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-300" />
+              </CardContent>
+            </Card>
+          </a>
+
           <a href="/dashboard/meals">
             <Card className="border-0 shadow-sm hover:shadow-md transition-all active:scale-95 cursor-pointer bg-green-50/50">
               <CardContent className="p-4 flex flex-col items-center justify-center text-center space-y-2">
@@ -281,7 +426,7 @@ export default async function DashboardPage() {
             </Card>
           </a>
 
-          {profile?.role === 'manager' && (
+          {(profile?.role === 'manager' || profile?.role === 'co_manager') && (
             <>
               <a href="/dashboard/approvals" className="col-span-2">
                 <Card className="border-0 shadow-sm hover:shadow-md transition-all active:scale-95 cursor-pointer bg-amber-50/50">
@@ -322,16 +467,71 @@ export default async function DashboardPage() {
                 </Card>
               </a>
 
-              <a href="/dashboard/mess-config" className="col-span-2">
-                <Card className="border-0 shadow-sm hover:shadow-md transition-all active:scale-95 cursor-pointer bg-emerald-50/50">
+              {profile?.role === 'manager' && (
+                <a href="/dashboard/mess-config" className="col-span-2">
+                  <Card className="border-0 shadow-sm hover:shadow-md transition-all active:scale-95 cursor-pointer bg-emerald-50/50">
+                    <CardContent className="p-3 px-6 flex items-center justify-between text-left space-x-4">
+                      <div className="flex items-center space-x-4">
+                        <div className="bg-emerald-100 p-3 rounded-2xl text-emerald-600">
+                          <Settings className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-slate-700">Mess Configuration</p>
+                          <p className="text-[10px] text-slate-500 font-medium">UPI, guest prices & handover</p>
+                        </div>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-slate-300" />
+                    </CardContent>
+                  </Card>
+                </a>
+              )}
+
+              {(profile?.role === 'manager' || profile?.role === 'co_manager') && (
+                <a href="/dashboard/audit-logs" className="col-span-2">
+                  <Card className="border-0 shadow-sm hover:shadow-md transition-all active:scale-95 cursor-pointer bg-indigo-50/50">
+                    <CardContent className="p-3 px-6 flex items-center justify-between text-left space-x-4">
+                      <div className="flex items-center space-x-4">
+                        <div className="bg-indigo-100 p-3 rounded-2xl text-indigo-600">
+                          <History className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-slate-700">Audit Logs (Manager Actions)</p>
+                          <p className="text-[10px] text-slate-500 font-medium">Track and revert manager overrides & approvals</p>
+                        </div>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-slate-300" />
+                    </CardContent>
+                  </Card>
+                </a>
+              )}
+
+              <a href="/dashboard/billing" className="col-span-2">
+                <Card className="border-0 shadow-sm hover:shadow-md transition-all active:scale-95 cursor-pointer bg-red-50/50">
                   <CardContent className="p-3 px-6 flex items-center justify-between text-left space-x-4">
                     <div className="flex items-center space-x-4">
-                      <div className="bg-emerald-100 p-3 rounded-2xl text-emerald-600">
-                        <Settings className="w-6 h-6" />
+                      <div className="bg-red-100 p-3 rounded-2xl text-red-600">
+                        <TrendingUp className="w-6 h-6" />
                       </div>
                       <div>
-                        <p className="text-sm font-bold text-slate-700">Mess Configuration</p>
-                        <p className="text-[10px] text-slate-500 font-medium">UPI, guest prices & handover</p>
+                        <p className="text-sm font-bold text-slate-700">Billing Center</p>
+                        <p className="text-[10px] text-slate-500 font-medium">Close month & preview calculations</p>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-300" />
+                  </CardContent>
+                </Card>
+              </a>
+
+              <a href="/dashboard/engagement" className="col-span-2">
+                <Card className="border-0 shadow-sm hover:shadow-md transition-all active:scale-95 cursor-pointer bg-violet-50/50">
+                  <CardContent className="p-3 px-6 flex items-center justify-between text-left space-x-4">
+                    <div className="flex items-center space-x-4">
+                      <div className="bg-violet-100 p-3 rounded-2xl text-violet-600">
+                        <Megaphone className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold text-slate-700">Engagement Center</p>
+                        <p className="text-[10px] text-slate-500 font-medium">Post menus, notices & menu polls</p>
                       </div>
                     </div>
                     <ChevronRight className="w-4 h-4 text-slate-300" />
@@ -340,6 +540,23 @@ export default async function DashboardPage() {
               </a>
             </>
           )}
+
+          <a href="/dashboard/bills" className="col-span-2">
+            <Card className="border-0 shadow-sm hover:shadow-md transition-all active:scale-95 cursor-pointer bg-blue-50/30">
+              <CardContent className="p-3 px-6 flex items-center justify-between text-left space-x-4">
+                <div className="flex items-center space-x-4">
+                  <div className="bg-blue-100 p-3 rounded-2xl text-blue-600">
+                    <Receipt className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-slate-700">Monthly Bills & Reports</p>
+                    <p className="text-[10px] text-slate-500 font-medium">Download summary & detailed statements</p>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-300" />
+              </CardContent>
+            </Card>
+          </a>
 
           <a href="/dashboard/settings" className="col-span-2">
             <Card className="border-0 shadow-sm hover:shadow-md transition-all active:scale-95 cursor-pointer bg-slate-50">
@@ -358,6 +575,16 @@ export default async function DashboardPage() {
             </Card>
           </a>
         </div>
+
+        {/* Manager Analytics Charts Section */}
+        {(profile?.role === 'manager' || profile?.role === 'co_manager') && (
+          <ManagerCharts 
+            bazarLogs={chartBazarLogs || []}
+            members={membersData || []}
+            mealOverrides={mealOverrides || []}
+            messCreatedDate={messCreatedDate}
+          />
+        )}
 
         {/* Mess Statistics Panel */}
         <Card className="border-0 shadow-sm">
