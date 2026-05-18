@@ -44,13 +44,13 @@ export default async function Home() {
         </div>
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-bold uppercase tracking-wider mb-6">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-secondary/15 text-secondary text-xs font-bold uppercase tracking-wider mb-6">
             <CheckCircle2 className="w-3.5 h-3.5" />
             Zero-Cost Mess Management
           </div>
           <h1 className="text-5xl lg:text-7xl font-black text-slate-900 tracking-tight mb-6">
             Manage your hostel mess <br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-blue-600">
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary">
               effortlessly and transparently.
             </span>
           </h1>
@@ -87,7 +87,7 @@ export default async function Home() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <Card className="border-0 bg-slate-50/50 shadow-none hover:bg-white hover:shadow-xl hover:shadow-slate-200/50 transition-all group">
               <CardContent className="p-8">
-                <div className="w-14 h-14 bg-green-100 rounded-2xl flex items-center justify-center mb-6 text-green-600 group-hover:scale-110 transition-transform">
+                <div className="w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center mb-6 text-primary group-hover:scale-110 transition-transform">
                   <UtensilsCrossed className="w-7 h-7" />
                 </div>
                 <h3 className="text-xl font-bold text-slate-900 mb-3">Meal Attendance</h3>
@@ -99,7 +99,7 @@ export default async function Home() {
 
             <Card className="border-0 bg-slate-50/50 shadow-none hover:bg-white hover:shadow-xl hover:shadow-slate-200/50 transition-all group">
               <CardContent className="p-8">
-                <div className="w-14 h-14 bg-blue-100 rounded-2xl flex items-center justify-center mb-6 text-blue-600 group-hover:scale-110 transition-transform">
+                <div className="w-14 h-14 bg-secondary/15 rounded-2xl flex items-center justify-center mb-6 text-secondary group-hover:scale-110 transition-transform">
                   <Wallet className="w-7 h-7" />
                 </div>
                 <h3 className="text-xl font-bold text-slate-900 mb-3">Balance Tracking</h3>
@@ -111,7 +111,7 @@ export default async function Home() {
 
             <Card className="border-0 bg-slate-50/50 shadow-none hover:bg-white hover:shadow-xl hover:shadow-slate-200/50 transition-all group">
               <CardContent className="p-8">
-                <div className="w-14 h-14 bg-purple-100 rounded-2xl flex items-center justify-center mb-6 text-purple-600 group-hover:scale-110 transition-transform">
+                <div className="w-14 h-14 bg-accent/20 rounded-2xl flex items-center justify-center mb-6 text-accent-foreground group-hover:scale-110 transition-transform">
                   <CalendarRange className="w-7 h-7" />
                 </div>
                 <h3 className="text-xl font-bold text-slate-900 mb-3">Duty Roster</h3>
@@ -130,7 +130,7 @@ export default async function Home() {
           <div className="bg-slate-900 rounded-[32px] p-8 lg:p-12 text-white relative overflow-hidden shadow-2xl">
             <div className="absolute top-0 right-0 w-64 h-64 bg-primary/20 rounded-full blur-[80px] -mr-32 -mt-32" />
             <div className="relative z-10">
-              <ShieldCheck className="w-12 h-12 text-primary mx-auto mb-6" />
+              <ShieldCheck className="w-12 h-12 text-secondary mx-auto mb-6" />
               <h2 className="text-3xl lg:text-4xl font-bold mb-6">Transparency is our priority.</h2>
               <p className="text-slate-400 text-lg mb-8">
                 Every bazar log and transaction is verified by the manager. Everyone can see the live meal rate calculated based on actual expenses.
@@ -170,9 +170,12 @@ export default async function Home() {
           <p className="text-slate-500 text-sm italic">
             Built for students, by students. &copy; {new Date().getFullYear()}
           </p>
-          <div className="flex gap-6 text-sm font-semibold text-slate-600">
-            <Link href="/login" className="hover:text-primary">Login</Link>
-            <Link href="/onboarding" className="hover:text-primary">Setup Profile</Link>
+          <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm font-semibold text-slate-600">
+            <Link href="/login" className="hover:text-primary transition-colors">Login</Link>
+            <Link href="/onboarding" className="hover:text-primary transition-colors">Setup Profile</Link>
+            <Link href="/terms" className="hover:text-primary transition-colors">Terms & Conditions</Link>
+            <Link href="/privacy" className="hover:text-primary transition-colors">Privacy Policy</Link>
+            <Link href="/contact" className="hover:text-primary transition-colors">Contact Us</Link>
           </div>
         </div>
       </footer>

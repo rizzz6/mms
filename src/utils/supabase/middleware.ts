@@ -34,9 +34,14 @@ export async function updateSession(request: NextRequest) {
   // Routes configuration
   const isAuthPage = request.nextUrl.pathname.startsWith('/login') || request.nextUrl.pathname.startsWith('/auth')
   const isPublicFile = request.nextUrl.pathname.match(/\.(?:svg|png|jpg|jpeg|gif|webp|js|webmanifest)$/)
+  const isPublicPage = 
+    request.nextUrl.pathname === '/' || 
+    request.nextUrl.pathname.startsWith('/terms') || 
+    request.nextUrl.pathname.startsWith('/privacy') || 
+    request.nextUrl.pathname.startsWith('/contact')
 
   // 1. If not logged in and trying to access protected routes, redirect to login
-  if (!user && !isAuthPage && !isPublicFile && request.nextUrl.pathname !== '/') {
+  if (!user && !isAuthPage && !isPublicFile && !isPublicPage) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
@@ -50,7 +55,7 @@ export async function updateSession(request: NextRequest) {
   }
 
   // 3. Profile setup enforcement check
-  if (user && !isAuthPage && !isPublicFile) {
+  if (user && !isAuthPage && !isPublicFile && !isPublicPage) {
     const { data: profile } = await supabase
       .from('profiles')
       .select('full_name, mess_id, status')
