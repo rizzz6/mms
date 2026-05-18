@@ -6,7 +6,7 @@ import { createClient } from '@/utils/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, Calendar, ChevronLeft, ChevronRight, ShoppingBag, Droplets, AlertCircle, History, CheckCircle2, ReceiptText, Edit2, ArrowRightLeft, ListFilter, X, Sparkles, Users } from 'lucide-react'
+import { Loader2, Calendar, ChevronLeft, ChevronRight, ShoppingBag, Droplets, AlertCircle, History, CheckCircle2, ReceiptText, Edit2, ArrowRightLeft, ListFilter, X, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import { computeRoster, DayAssignment, Member, DutyRecord, AssignmentDetail } from '@/lib/roster-engine'
 import { restockInventoryItem, addCustomInventoryItem } from '@/app/actions/inventory'
@@ -56,7 +56,6 @@ export default function RosterPage() {
   // const [allRecords, setAllRecords] = useState<DutyRecord[]>([])
   const [assignments, setAssignments] = useState<DayAssignment[]>([])
   const [loading, setLoading] = useState(true)
-  const [todayMeals, setTodayMeals] = useState<any[]>([])
   const [processing, setProcessing] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const [userRole, setUserRole] = useState<string>('member')
@@ -70,6 +69,8 @@ export default function RosterPage() {
   const [reassignTarget, setReassignTarget] = useState<{ date: string, type: 'bazar' | 'water', memberId: string } | null>(null)
   const [isEditingBazar, setIsEditingBazar] = useState(false)
   const [messId, setMessId] = useState<string | null>(null)
+
+
 
   // Pantry Sync State
   const [pantryItems, setPantryItems] = useState<any[]>([])
@@ -108,6 +109,8 @@ export default function RosterPage() {
     setParsedSuggestions(suggestions)
   }, [bazarItems])
 
+
+
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
@@ -125,64 +128,69 @@ export default function RosterPage() {
       const startDate = addDays(startOfWeek(new Date()), weekOffset * 7)
       const endDate = addDays(startDate, 6)
       const endDateStr = endDate.toISOString().split('T')[0]
-
-      // 1. Fetch members sorted
-      const { data: mData } = await supabase
-        .from('profiles')
-        .select('id, full_name, joined_at, is_inactive, inactive_until')
-        .eq('mess_id', profile.mess_id)
-        .eq('status', 'approved')
-        .order('joined_at', { ascending: true })
-      
-      const formattedMembers = (mData as Member[]) || []
-      setMembers(formattedMembers)
-
-      // 2. Fetch all historical records up to current window end
-      const { data: rData } = await supabase
-        .from('duty_roster')
-        .select('*')
-        .eq('mess_id', profile.mess_id)
-        .lte('date', endDateStr)
-        .order('date', { ascending: true })
-      
-      const formattedRecords = (rData as DutyRecord[]) || []
-      // setAllRecords(formattedRecords)
-
-      // 3. Compute
-      const roster = computeRoster(formattedMembers, formattedRecords, startDate, 7)
-      setAssignments(roster)
-
-      // 4. Check for today's bazar log
       const todayStr = new Date().toISOString().split('T')[0]
-      const { data: log } = await supabase
-        .from('bazar_logs')
-        .select('*')
-        .eq('mess_id', profile.mess_id)
-        .eq('shopper_id', user.id)
-        .eq('date', todayStr)
-        .maybeSingle()
-      
-      setTodayLog(log)
 
-      // Fetch today's meals (members + guests)
-      const { data: tMeals } = await supabase
-        .from('meals')
-        .select('*')
-        .eq('mess_id', profile.mess_id)
-        .eq('date', todayStr)
-      setTodayMeals(tMeals || [])
-
-      // Fetch existing pantry items and fines configuration
-      const [pItems, cRows] = await Promise.all([
-        supabase.from('inventory_items').select('*').eq('mess_id', profile.mess_id),
-        supabase.from('mess_config').select('key, value').eq('mess_id', profile.mess_id).in('key', ['fines_enabled', 'penalty_skipped_duty'])
+      // Fetch all required data in parallel
+      const [mData, rData, logRes, pItemsRes, cRowsRes] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('id, full_name, joined_at, is_inactive, inactive_until, role')
+          .eq('mess_id', profile.mess_id)
+          .eq('status', 'approved')
+          .order('joined_at', { ascending: true }),
+        supabase
+          .from('duty_roster')
+          .select('*')
+          .eq('mess_id', profile.mess_id)
+          .lte('date', endDateStr)
+          .order('date', { ascending: true }),
+        supabase
+          .from('bazar_logs')
+          .select('*')
+          .eq('mess_id', profile.mess_id)
+          .eq('shopper_id', user.id)
+          .eq('date', todayStr)
+          .maybeSingle(),
+        supabase
+          .from('inventory_items')
+          .select('*')
+          .eq('mess_id', profile.mess_id),
+        supabase
+          .from('mess_config')
+          .select('key, value')
+          .eq('mess_id', profile.mess_id)
+          .in('key', ['fines_enabled', 'penalty_skipped_duty', 'exclude_managers_from_duty', 'exclude_comanagers_from_duty'])
       ])
 
-      setPantryItems(pItems.data || [])
+      const formattedMembers = (mData.data as Member[]) || []
+      setMembers(formattedMembers)
+
+      const formattedRecords = (rData.data as DutyRecord[]) || []
+
+      setTodayLog(logRes.data)
+      setPantryItems(pItemsRes.data || [])
+
       const cMap: Record<string, string> = {}
-      cRows.data?.forEach(r => cMap[r.key] = r.value)
+      cRowsRes.data?.forEach(r => cMap[r.key] = r.value)
       setFinesEnabled(cMap['fines_enabled'] === 'true')
       setSkippedDutyFine(Number(cMap['penalty_skipped_duty'] || 50))
+
+      // Exclude managers from scheduling if configured
+      const excludeManagers = cMap['exclude_managers_from_duty'] === 'true'
+      const excludeCoManagers = cMap['exclude_comanagers_from_duty'] === 'true'
+      const filteredMembersForRoster = formattedMembers.filter(m => {
+        if (excludeManagers && m.role === 'manager') {
+          return false
+        }
+        if (excludeCoManagers && m.role === 'co_manager') {
+          return false
+        }
+        return true
+      })
+
+      // 3. Compute
+      const roster = computeRoster(filteredMembersForRoster, formattedRecords, startDate, 7)
+      setAssignments(roster)
     } catch (error) {
       console.error(error)
       toast.error('Failed to load roster')
@@ -586,105 +594,17 @@ export default function RosterPage() {
         </div>
         
         <div className="space-y-1">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Management</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#6A2C70]">Management</p>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">Duty Roster</h1>
         </div>
       </div>
 
       <div className="max-w-md mx-auto px-4 space-y-6">
 
-        {/* Today's Confirmed Eaters Card for Shopper (Option A) */}
-        {(() => {
-          const todayStrStr = new Date().toISOString().split('T')[0]
-          let confirmedLunchMembers = 0
-          let confirmedDinnerMembers = 0
-
-          members.forEach(m => {
-            if (m.is_inactive) return
-            const joinedDateStr = new Date(m.joined_at).toISOString().split('T')[0]
-            
-            // Lunch
-            const lunchOverride = todayMeals.find(me => me.user_id === m.id && me.type === 'lunch' && !me.is_guest)
-            if (lunchOverride) {
-              if (lunchOverride.status === 'eating') confirmedLunchMembers++
-            } else {
-              if (todayStrStr >= joinedDateStr) confirmedLunchMembers++
-            }
-
-            // Dinner
-            const dinnerOverride = todayMeals.find(me => me.user_id === m.id && me.type === 'dinner' && !me.is_guest)
-            if (dinnerOverride) {
-              if (dinnerOverride.status === 'eating') confirmedDinnerMembers++
-            } else {
-              if (todayStrStr >= joinedDateStr) confirmedDinnerMembers++
-            }
-          })
-
-          const todayGuests = todayMeals.filter(me => me.is_guest)
-          const confirmedLunchGuests = todayGuests.filter(me => me.type === 'lunch')
-          const confirmedDinnerGuests = todayGuests.filter(me => me.type === 'dinner')
-
-          return (
-            <Card className="border-0 shadow-lg bg-gradient-to-br from-slate-900 to-slate-800 text-white overflow-hidden">
-              <div className="bg-white/5 p-4 border-b border-white/5 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Users className="w-4 h-4 text-emerald-400" />
-                  <h3 className="text-xs font-black uppercase tracking-wider text-emerald-400">Confirmed Eaters Today</h3>
-                </div>
-                <Badge className="bg-emerald-500 hover:bg-emerald-500 text-white font-bold text-[9px] px-2 rounded-lg border-0">
-                  {confirmedLunchMembers + confirmedLunchGuests.length + confirmedDinnerMembers + confirmedDinnerGuests.length} Portions
-                </Badge>
-              </div>
-              <CardContent className="p-4 space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Lunch */}
-                  <div className="bg-white/5 p-3 rounded-2xl border border-white/5 space-y-1">
-                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest leading-none">Lunch Eaters</p>
-                    <div className="flex items-baseline gap-1 mt-1">
-                      <span className="text-xl font-black text-white">{confirmedLunchMembers + confirmedLunchGuests.length}</span>
-                      <span className="text-[10px] text-slate-400">portions</span>
-                    </div>
-                    <p className="text-[9px] text-slate-500 font-medium">
-                      {confirmedLunchMembers} Members • {confirmedLunchGuests.length} Guests
-                    </p>
-                  </div>
-
-                  {/* Dinner */}
-                  <div className="bg-white/5 p-3 rounded-2xl border border-white/5 space-y-1">
-                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest leading-none">Dinner Eaters</p>
-                    <div className="flex items-baseline gap-1 mt-1">
-                      <span className="text-xl font-black text-white">{confirmedDinnerMembers + confirmedDinnerGuests.length}</span>
-                      <span className="text-[10px] text-slate-400">portions</span>
-                    </div>
-                    <p className="text-[9px] text-slate-500 font-medium">
-                      {confirmedDinnerMembers} Members • {confirmedDinnerGuests.length} Guests
-                    </p>
-                  </div>
-                </div>
-
-                {/* Guest breakdown details for the shopper */}
-                {todayGuests.length > 0 && (
-                  <div className="bg-white/5 rounded-2xl p-3 border border-white/5 space-y-2">
-                    <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Guest Items List</p>
-                    <div className="divide-y divide-white/5 max-h-[120px] overflow-y-auto">
-                      {todayGuests.map((g, idx) => (
-                        <div key={idx} className="flex justify-between py-1.5 text-xs text-slate-200">
-                          <span className="font-semibold">{g.guest_name || 'Guest'} <span className="text-[9px] text-slate-400 uppercase font-medium">({g.type})</span></span>
-                          <span className="text-emerald-400 font-bold">{g.guest_type || 'Standard'}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )
-        })()}
-
       {/* 1. Bazaar Logging Card */}
       <div className="space-y-3">
         <div className="flex items-center gap-2 mb-1">
-          <ReceiptText className="w-4 h-4 text-primary" />
+          <ReceiptText className="w-4 h-4 text-[#6A2C70]" />
           <h2 className="text-xs font-black uppercase tracking-widest text-slate-500">Bazaar Daily Log</h2>
         </div>
         
@@ -721,7 +641,7 @@ export default function RosterPage() {
               <Button 
                 variant="ghost" 
                 size="icon" 
-                className="h-10 w-10 text-slate-400 hover:text-primary"
+                className="h-10 w-10 text-slate-400 hover:text-[#6A2C70]"
                 onClick={() => {
                   setBazarAmount(todayLog.amount.toString())
                   setBazarItems(todayLog.items)
@@ -733,16 +653,17 @@ export default function RosterPage() {
             )}
           </div>
         ) : isEditingBazar ? (
-          <form onSubmit={handleBazarUpdate} className="space-y-4 bg-white p-5 rounded-2xl border-2 border-primary shadow-lg animate-in zoom-in-95 duration-200">
+          <form onSubmit={handleBazarUpdate} className="space-y-4 bg-white p-5 rounded-2xl border-2 border-[#6A2C70] shadow-lg animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                <Edit2 className="w-4 h-4 text-primary" />
+                <Edit2 className="w-4 h-4 text-[#6A2C70]" />
                 <h3 className="text-sm font-black uppercase text-slate-700 tracking-wider">Update Bazar Log</h3>
               </div>
               <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIsEditingBazar(false)}>
                 <X className="w-4 h-4" />
               </Button>
             </div>
+
             <div className="space-y-4">
               <div className="space-y-1.5">
                 <Label htmlFor="eb-amount" className="text-[10px] text-slate-500 font-black ml-1 uppercase tracking-wider">Amount (₹)</Label>
@@ -751,7 +672,7 @@ export default function RosterPage() {
                   type="number"
                   value={bazarAmount}
                   onChange={(e) => setBazarAmount(e.target.value)}
-                  className="h-12 text-lg font-bold bg-slate-50 border-0 focus-visible:ring-primary"
+                  className="h-12 text-lg font-bold bg-slate-50 border-0 focus-visible:ring-[#6A2C70]"
                 />
               </div>
               <div className="space-y-1.5">
@@ -760,7 +681,7 @@ export default function RosterPage() {
                   id="eb-items"
                   value={bazarItems}
                   onChange={(e) => setBazarItems(e.target.value)}
-                  className="h-20 text-sm bg-slate-50 border-0 focus-visible:ring-primary py-3"
+                  className="h-20 text-sm bg-slate-50 border-0 focus-visible:ring-[#6A2C70] py-3"
                   placeholder="What did you buy?"
                 />
                 {parsedSuggestions.length > 0 && (
@@ -793,7 +714,7 @@ export default function RosterPage() {
             </div>
             <Button 
               type="submit" 
-              className="w-full h-12 text-xs font-black uppercase tracking-[0.2em] bg-primary text-white shadow-md active:scale-95 transition-all"
+              className="w-full h-12 text-xs font-black uppercase tracking-[0.2em] bg-[#6A2C70] hover:bg-[#4D1C54] text-white shadow-md active:scale-95 transition-all"
               disabled={submittingBazar}
             >
               {submittingBazar ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Update Bazar Log'}
@@ -802,9 +723,10 @@ export default function RosterPage() {
         ) : (
           <form onSubmit={handleBazarSubmit} className="space-y-4 bg-white p-5 rounded-2xl border-2 border-slate-100 shadow-md">
             <div className="flex items-center gap-2 mb-2">
-              <ShoppingBag className="w-4 h-4 text-primary" />
+              <ShoppingBag className="w-4 h-4 text-[#6A2C70]" />
               <h3 className="text-sm font-black uppercase text-slate-700 tracking-wider">Log Today&apos;s Expenses</h3>
             </div>
+
             <div className="space-y-4">
               <div className="space-y-1.5">
                 <Label htmlFor="b-amount" className="text-[10px] text-slate-500 font-black ml-1 uppercase tracking-wider">Amount (₹)</Label>
@@ -813,7 +735,7 @@ export default function RosterPage() {
                   type="number"
                   value={bazarAmount}
                   onChange={(e) => setBazarAmount(e.target.value)}
-                  className="h-12 text-lg font-bold bg-slate-50 border-0 focus-visible:ring-primary"
+                  className="h-12 text-lg font-bold bg-slate-50 border-0 focus-visible:ring-[#6A2C70]"
                   placeholder="0.00"
                 />
               </div>
@@ -823,41 +745,42 @@ export default function RosterPage() {
                   id="b-items"
                   value={bazarItems}
                   onChange={(e) => setBazarItems(e.target.value)}
-                  className="h-20 text-sm bg-slate-50 border-0 focus-visible:ring-primary py-3"
+                  className="h-20 text-sm bg-slate-50 border-0 focus-visible:ring-[#6A2C70] py-3"
                   placeholder="Rice, Dal, Oil, etc."
                 />
-                {parsedSuggestions.length > 0 && (
-                  <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-4 space-y-2 mt-2 animate-in slide-in-from-top-2 duration-200">
-                    <div className="flex items-center justify-between">
-                      <p className="text-[10px] font-black text-indigo-700 uppercase tracking-widest flex items-center gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5 fill-indigo-400 text-indigo-400 animate-pulse" />
-                        Pantry Restock Detections
-                      </p>
-                      <label className="flex items-center gap-1.5 cursor-pointer">
-                        <input 
-                          type="checkbox" 
-                          checked={approvePantrySync}
-                          onChange={(e) => setApprovePantrySync(e.target.checked)}
-                          className="w-3.5 h-3.5 accent-indigo-600 rounded outline-none"
-                        />
-                        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-tighter">Sync Stock</span>
-                      </label>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {parsedSuggestions.map((s, idx) => (
-                        <Badge key={idx} className="bg-indigo-100 hover:bg-indigo-100 border-0 text-indigo-700 font-bold text-[9px] h-5 rounded-lg px-2">
-                          {s.name} ({s.quantity}{s.unit}) - ₹{s.price}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
+
+              {parsedSuggestions.length > 0 && (
+                <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-4 space-y-2 mt-2 animate-in slide-in-from-top-2 duration-200">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] font-black text-indigo-700 uppercase tracking-widest flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 fill-indigo-400 text-indigo-400 animate-pulse" />
+                      Pantry Restock Detections
+                    </p>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={approvePantrySync}
+                        onChange={(e) => setApprovePantrySync(e.target.checked)}
+                        className="w-3.5 h-3.5 accent-indigo-600 rounded outline-none"
+                      />
+                      <span className="text-[9px] font-bold text-slate-500 uppercase tracking-tighter">Sync Stock</span>
+                    </label>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {parsedSuggestions.map((s, idx) => (
+                      <Badge key={idx} className="bg-indigo-100 hover:bg-indigo-100 border-0 text-indigo-700 font-bold text-[9px] h-5 rounded-lg px-2">
+                        {s.name} ({s.quantity}{s.unit}) - ₹{s.price}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="flex gap-2">
               <Button 
                 type="submit" 
-                className="flex-1 h-12 text-xs font-black uppercase tracking-[0.2em] bg-primary text-white shadow-md active:scale-95 transition-all"
+                className="flex-1 h-12 text-xs font-black uppercase tracking-[0.2em] bg-[#6A2C70] hover:bg-[#4D1C54] text-white shadow-md active:scale-95 transition-all"
                 disabled={submittingBazar}
               >
                 {submittingBazar ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Submit Bazar Log'}
@@ -883,7 +806,7 @@ export default function RosterPage() {
         </Button>
         <div className="flex flex-col items-center gap-0.5">
           <div className="flex items-center gap-1.5 font-black text-slate-700 text-sm uppercase tracking-tighter">
-            <Calendar className="w-4 h-4 text-primary" />
+            <Calendar className="w-4 h-4 text-[#6A2C70]" />
             Duty Schedule
           </div>
           <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
@@ -900,10 +823,10 @@ export default function RosterPage() {
         <div className="grid grid-cols-6 bg-slate-50 border-b text-[10px] font-black uppercase tracking-widest text-slate-500">
           <div className="col-span-2 p-4 border-r">Date & Day</div>
           <div className="col-span-2 p-4 border-r flex items-center justify-center gap-2">
-            <ShoppingBag className="w-3 h-3 text-orange-500" /> Bazaar
+            <ShoppingBag className="w-3 h-3 text-[#F08A5D]" /> Bazaar
           </div>
           <div className="col-span-2 p-4 flex items-center justify-center gap-2">
-            <Droplets className="w-3 h-3 text-blue-500" /> Water
+            <Droplets className="w-3 h-3 text-[#6A2C70]" /> Water
           </div>
         </div>
 
@@ -914,7 +837,7 @@ export default function RosterPage() {
         ) : (
           <div className="divide-y">
             {assignments.map((day) => (
-              <div key={day.date} className={`grid grid-cols-6 items-center min-h-[90px] ${day.date === todayStr ? 'bg-primary/5' : ''}`}>
+              <div key={day.date} className={`grid grid-cols-6 items-center min-h-[90px] ${day.date === todayStr ? 'bg-[#6A2C70]/5' : ''}`}>
                 {/* Date Column */}
                 <div className="col-span-2 p-4 border-r h-full flex flex-col justify-center">
                   <p className="text-[11px] font-black text-slate-400 uppercase leading-none mb-1">
@@ -923,7 +846,7 @@ export default function RosterPage() {
                   <p className="text-base font-black text-slate-700 leading-none">
                     {new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short' }).format(new Date(day.date))}
                   </p>
-                  {day.date === todayStr && <Badge className="mt-2 text-[8px] h-4 w-fit px-2 bg-primary font-black uppercase tracking-widest">TODAY</Badge>}
+                  {day.date === todayStr && <Badge className="mt-2 text-[8px] h-4 w-fit px-2 bg-[#6A2C70] font-black uppercase tracking-widest">TODAY</Badge>}
                 </div>
 
                 {/* Bazaar Column */}
@@ -984,18 +907,23 @@ export default function RosterPage() {
       </div>
 
       {userRole === 'manager' && (
-        <div className="bg-gradient-to-br from-primary to-blue-700 rounded-[2rem] p-6 text-white space-y-4 shadow-xl shadow-primary/20 border border-white/10 relative overflow-hidden group">
+        <div className="bg-[#6A2C70] rounded-[2rem] p-6 text-white space-y-4 shadow-xl shadow-[#6A2C70]/20 border border-white/10 relative overflow-hidden group">
           <div className="absolute -right-4 -top-4 w-24 h-24 bg-white/10 rounded-full blur-2xl group-hover:bg-white/20 transition-all" />
           <div className="flex items-center gap-2 text-white/90">
             <AlertCircle className="w-4 h-4" />
             <h3 className="text-xs font-black uppercase tracking-widest">Administrative Control</h3>
           </div>
           <Button 
-            className="w-full h-12 bg-white hover:bg-slate-50 text-primary font-black text-xs uppercase tracking-widest shadow-lg active:scale-95 transition-all" 
+            className="w-full h-12 bg-white hover:bg-slate-50 text-[#6A2C70] font-black text-xs uppercase tracking-widest shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2" 
             onClick={generateRoster}
             disabled={loading}
           >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : '⚡ Generate New Roster'}
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : (
+              <>
+                <Sparkles className="w-4 h-4" />
+                <span>Generate New Roster</span>
+              </>
+            )}
           </Button>
           <p className="text-[9px] text-white/60 text-center font-medium uppercase tracking-tight">
             Use this to initialize the duty schedule for the current week.
@@ -1016,18 +944,32 @@ export default function RosterPage() {
             <div className="space-y-2">
               <Label>Select Member</Label>
               <div className="grid grid-cols-1 gap-2 max-h-[40vh] overflow-y-auto pr-2">
-                {members.map(m => (
-                  <button
-                    key={m.id}
-                    onClick={() => handleReassign(m.id)}
-                    className={`flex items-center justify-between p-3 rounded-xl border text-left transition-all ${
-                      reassignTarget?.memberId === m.id ? 'bg-primary/10 border-primary border-2 shadow-sm' : 'bg-white border-slate-100 hover:border-slate-300'
-                    }`}
-                  >
-                    <span className="text-sm font-bold">{m.full_name}</span>
-                    {reassignTarget?.memberId === m.id && <CheckCircle2 className="w-4 h-4 text-primary" />}
-                  </button>
-                ))}
+                {members.map(m => {
+                  const isAbsent = reassignTarget?.date ? (
+                    m.is_inactive || !!(m.inactive_until && new Date(m.inactive_until).toISOString().split('T')[0] >= reassignTarget.date)
+                  ) : false
+
+                  return (
+                    <button
+                      key={m.id}
+                      onClick={() => !isAbsent && handleReassign(m.id)}
+                      disabled={isAbsent}
+                      className={`flex items-center justify-between p-3 rounded-xl border text-left transition-all ${
+                        isAbsent 
+                          ? 'bg-slate-50 border-slate-100 opacity-40 cursor-not-allowed'
+                          : reassignTarget?.memberId === m.id 
+                            ? 'bg-[#6A2C70]/10 border-[#6A2C70] border-2 shadow-sm' 
+                            : 'bg-white border-slate-100 hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="flex flex-col">
+                        <span className="text-sm font-bold text-slate-700">{m.full_name}</span>
+                        {isAbsent && <span className="text-[10px] text-red-500 font-semibold">Absent / Inactive</span>}
+                      </div>
+                      {reassignTarget?.memberId === m.id && <CheckCircle2 className="w-4 h-4 text-[#6A2C70]" />}
+                    </button>
+                  )
+                })}
               </div>
             </div>
           </div>
@@ -1073,19 +1015,33 @@ export default function RosterPage() {
             <div className="space-y-3">
               <Label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Option 1: Reassign to someone else</Label>
               <div className="grid grid-cols-1 gap-2 max-h-[30vh] overflow-y-auto p-1 border rounded-xl bg-slate-50">
-                {members.map(m => (
-                  <button
-                    key={m.id}
-                    onClick={() => handleReassign(m.id)}
-                    className={`flex items-center justify-between p-3 rounded-lg border bg-white hover:border-primary transition-all text-left ${
-                      skipDialogTarget?.assignment.member.id === m.id ? 'opacity-50 grayscale' : ''
-                    }`}
-                    disabled={skipDialogTarget?.assignment.member.id === m.id}
-                  >
-                    <span className="text-sm font-bold">{m.full_name}</span>
-                    <ArrowRightLeft className="w-3 h-3 text-slate-300" />
-                  </button>
-                ))}
+                {members.map(m => {
+                  const isAbsent = skipDialogTarget?.date ? (
+                    m.is_inactive || !!(m.inactive_until && new Date(m.inactive_until).toISOString().split('T')[0] >= skipDialogTarget.date)
+                  ) : false
+                  const isCurrent = skipDialogTarget?.assignment.member.id === m.id
+
+                  return (
+                    <button
+                      key={m.id}
+                      onClick={() => !isAbsent && !isCurrent && handleReassign(m.id)}
+                      disabled={isAbsent || isCurrent}
+                      className={`flex items-center justify-between p-3 rounded-lg border bg-white hover:border-[#6A2C70] transition-all text-left ${
+                        isAbsent 
+                          ? 'bg-slate-50 border-slate-100 opacity-40 cursor-not-allowed'
+                          : isCurrent 
+                            ? 'opacity-50 grayscale' 
+                            : ''
+                      }`}
+                    >
+                      <div className="flex flex-col">
+                        <span className="text-sm font-bold text-slate-700">{m.full_name}</span>
+                        {isAbsent && <span className="text-[10px] text-red-500 font-semibold">Absent / Inactive</span>}
+                      </div>
+                      <ArrowRightLeft className="w-3 h-3 text-slate-300" />
+                    </button>
+                  )
+                })}
               </div>
             </div>
 
@@ -1112,7 +1068,7 @@ export default function RosterPage() {
       {/* Follow-up Dialog (Tomorrow's Bazaar?) */}
       <Dialog open={!!followUpTarget} onOpenChange={(open) => !open && setFollowUpTarget(null)}>
         <DialogContent className="max-w-[90vw] rounded-[2rem] p-0 overflow-hidden border-0 shadow-2xl">
-          <div className="bg-primary p-8 text-white flex flex-col items-center text-center space-y-4">
+          <div className="bg-[#6A2C70] p-8 text-white flex flex-col items-center text-center space-y-4">
             <div className="bg-white/20 p-4 rounded-full backdrop-blur-md">
               <Calendar className="w-8 h-8 text-white" />
             </div>
@@ -1128,7 +1084,7 @@ export default function RosterPage() {
 
           <div className="p-6 space-y-3 bg-white">
             <Button 
-              className="w-full h-14 rounded-2xl bg-primary hover:bg-primary/90 text-white font-black uppercase tracking-widest shadow-lg active:scale-95 transition-all"
+              className="w-full h-14 rounded-2xl bg-[#6A2C70] hover:bg-[#4D1C54] text-white font-black uppercase tracking-widest shadow-lg active:scale-95 transition-all"
               onClick={() => handleFollowUpAssign(true)}
               disabled={!!processing}
             >

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Loader2, QrCode, Save, Upload, AlertTriangle, ArrowRightLeft, Check, X, Settings, Copy, ChevronRight, Bell } from 'lucide-react'
+import { Loader2, QrCode, Save, Upload, AlertTriangle, ArrowRightLeft, Check, X, Settings, Copy, ChevronRight, Bell, Clock, Users, Package } from 'lucide-react'
 import { toast } from 'sonner'
 import Image from 'next/image'
 import ManagerNotificationSettings from '@/components/ManagerNotificationSettings'
@@ -19,6 +19,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => {
+  const ampm = i >= 12 ? 'PM' : 'AM'
+  const displayHour = i % 12 === 0 ? 12 : i % 12
+  return {
+    value: i.toString(),
+    label: `${displayHour}:00 ${ampm}`
+  }
+})
 
 export default function MessConfigPage() {
   const [user, setUser] = useState<User | null>(null)
@@ -53,6 +62,13 @@ export default function MessConfigPage() {
   const [minRequiredBalance, setMinRequiredBalance] = useState('')
   const [auditLogRetentionDays, setAuditLogRetentionDays] = useState('90')
 
+  // Cutoff Times State
+  const [lunchCutoff, setLunchCutoff] = useState('9')
+  const [dinnerCutoff, setDinnerCutoff] = useState('17')
+  const [excludeManagers, setExcludeManagers] = useState(false)
+  const [excludeCoManagers, setExcludeCoManagers] = useState(false)
+  const [bulkTrackableItems, setBulkTrackableItems] = useState('Rice, Potato, Onion, Oil, Dal, Flour')
+
   const supabase = createClient()
 
   useEffect(() => {
@@ -64,7 +80,7 @@ export default function MessConfigPage() {
       const [pRes, mRes, cRes] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', user.id).single(),
         supabase.from('profiles').select('id, full_name').eq('mess_id', (await supabase.from('profiles').select('mess_id').eq('id', user.id).single()).data?.mess_id).eq('role', 'member').order('joined_at', { ascending: true }),
-        supabase.from('mess_config').select('key, value').in('key', ['guest_meal_rate', 'guest_meal_types', 'is_paused', 'fines_enabled', 'penalty_skipped_duty', 'penalty_low_balance', 'minimum_required_balance', 'audit_log_retention_days']).eq('mess_id', (await supabase.from('profiles').select('mess_id').eq('id', user.id).single()).data?.mess_id)
+        supabase.from('mess_config').select('key, value').in('key', ['guest_meal_rate', 'guest_meal_types', 'is_paused', 'fines_enabled', 'penalty_skipped_duty', 'penalty_low_balance', 'minimum_required_balance', 'audit_log_retention_days', 'lunch_cutoff', 'dinner_cutoff', 'exclude_managers_from_duty', 'exclude_comanagers_from_duty', 'bulk_trackable_items']).eq('mess_id', (await supabase.from('profiles').select('mess_id').eq('id', user.id).single()).data?.mess_id)
       ])
 
       if (pRes.data?.mess_id) {
@@ -108,12 +124,22 @@ export default function MessConfigPage() {
         const penaltyLowConfig = cRes.data.find(c => c.key === 'penalty_low_balance')
         const minReqConfig = cRes.data.find(c => c.key === 'minimum_required_balance')
         const auditLogRetentionConfig = cRes.data.find(c => c.key === 'audit_log_retention_days')
+        const lunchCutoffConfig = cRes.data.find(c => c.key === 'lunch_cutoff')
+        const dinnerCutoffConfig = cRes.data.find(c => c.key === 'dinner_cutoff')
+        const excludeManagersConfig = cRes.data.find(c => c.key === 'exclude_managers_from_duty')
+        const excludeCoManagersConfig = cRes.data.find(c => c.key === 'exclude_comanagers_from_duty')
 
         if (finesEnabledConfig) setFinesEnabled(finesEnabledConfig.value === 'true')
         if (penaltySkippedConfig) setPenaltySkippedDuty(penaltySkippedConfig.value || '50')
         if (penaltyLowConfig) setPenaltyLowBalance(penaltyLowConfig.value || '100')
         if (minReqConfig) setMinRequiredBalance(minReqConfig.value || '200')
         if (auditLogRetentionConfig) setAuditLogRetentionDays(auditLogRetentionConfig.value || '90')
+        if (lunchCutoffConfig) setLunchCutoff(lunchCutoffConfig.value || '9')
+        if (dinnerCutoffConfig) setDinnerCutoff(dinnerCutoffConfig.value || '17')
+        if (excludeManagersConfig) setExcludeManagers(excludeManagersConfig.value === 'true')
+        if (excludeCoManagersConfig) setExcludeCoManagers(excludeCoManagersConfig.value === 'true')
+        const bulkItemsConfig = cRes.data.find(c => c.key === 'bulk_trackable_items')
+        if (bulkItemsConfig) setBulkTrackableItems(bulkItemsConfig.value || 'Rice, Potato, Onion, Oil, Dal, Flour')
 
         if (typesConfig) {
           try {
@@ -216,6 +242,36 @@ export default function MessConfigPage() {
           key: 'audit_log_retention_days',
           value: auditLogRetentionDays || '90',
           description: 'Days to keep audit logs before auto-deletion',
+          mess_id: profile.mess_id
+        }),
+        supabase.from('mess_config').upsert({
+          key: 'lunch_cutoff',
+          value: lunchCutoff,
+          description: 'Lunch cutoff hour (24h format, e.g. 9 for 9 AM)',
+          mess_id: profile.mess_id
+        }),
+        supabase.from('mess_config').upsert({
+          key: 'dinner_cutoff',
+          value: dinnerCutoff,
+          description: 'Dinner cutoff hour (24h format, e.g. 17 for 5 PM)',
+          mess_id: profile.mess_id
+        }),
+        supabase.from('mess_config').upsert({
+          key: 'exclude_managers_from_duty',
+          value: excludeManagers.toString(),
+          description: 'Exclude managers from the shopper and water duty roster',
+          mess_id: profile.mess_id
+        }),
+        supabase.from('mess_config').upsert({
+          key: 'exclude_comanagers_from_duty',
+          value: excludeCoManagers.toString(),
+          description: 'Exclude co-managers from the shopper and water duty roster',
+          mess_id: profile.mess_id
+        }),
+        supabase.from('mess_config').upsert({
+          key: 'bulk_trackable_items',
+          value: bulkTrackableItems,
+          description: 'Comma separated list of trackable bulk pantry items',
           mess_id: profile.mess_id
         })
       ]
@@ -499,6 +555,165 @@ export default function MessConfigPage() {
                   </div>
                 </div>
               </div>
+            </div>
+
+            <Button 
+              className="w-full h-12 font-black uppercase tracking-widest shadow-lg shadow-primary/20 bg-primary hover:bg-primary/90 text-white" 
+              onClick={handleSaveConfig}
+              disabled={savingConfig}
+            >
+              {savingConfig ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+              Save All Settings
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* 3. Meal Cutoff Times */}
+        <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm rounded-[2rem]">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2 text-slate-800">
+              <Clock className="w-5 h-5 text-primary" />
+              Meal Cutoff Times
+            </CardTitle>
+            <CardDescription>
+              Set the latest hour members can turn off their meals.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="lunchCutoff">Lunch Cutoff Time</Label>
+                <select
+                  id="lunchCutoff"
+                  className="w-full h-11 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
+                  value={lunchCutoff}
+                  onChange={(e) => setLunchCutoff(e.target.value)}
+                >
+                  {HOUR_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-slate-400 font-medium ml-1">
+                  Members cannot turn off or edit their lunch on the day of after this hour.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="dinnerCutoff">Dinner Cutoff Time</Label>
+                <select
+                  id="dinnerCutoff"
+                  className="w-full h-11 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 outline-none"
+                  value={dinnerCutoff}
+                  onChange={(e) => setDinnerCutoff(e.target.value)}
+                >
+                  {HOUR_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-slate-400 font-medium ml-1">
+                  Members cannot turn off or edit their dinner on the day of after this hour.
+                </p>
+              </div>
+            </div>
+
+            <Button 
+              className="w-full h-12 font-black uppercase tracking-widest shadow-lg shadow-primary/20 bg-primary hover:bg-primary/90 text-white" 
+              onClick={handleSaveConfig}
+              disabled={savingConfig}
+            >
+              {savingConfig ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+              Save All Settings
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Roster & Duty Settings */}
+        <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm rounded-[2rem]">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Users className="w-5 h-5 text-primary" />
+              Roster & Duty Settings
+            </CardTitle>
+            <CardDescription>
+              Manage automatic shopper and water duty assignments.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+              <div className="space-y-0.5">
+                <p className="text-sm font-bold text-slate-800">Exclude Managers from Duty</p>
+                <p className="text-[10px] text-slate-500 font-medium max-w-[200px]">
+                  Remove all users with the Manager role from automatic duty roster scheduling.
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={excludeManagers} 
+                  onChange={(e) => setExcludeManagers(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+              </label>
+            </div>
+
+            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+              <div className="space-y-0.5">
+                <p className="text-sm font-bold text-slate-800">Exclude Co-Managers from Duty</p>
+                <p className="text-[10px] text-slate-500 font-medium max-w-[200px]">
+                  Remove all users with the Co-Manager role from automatic duty roster scheduling.
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  checked={excludeCoManagers} 
+                  onChange={(e) => setExcludeCoManagers(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+              </label>
+            </div>
+            
+            <Button 
+              className="w-full h-12 font-black uppercase tracking-widest shadow-lg shadow-primary/20 bg-primary hover:bg-primary/90 text-white" 
+              onClick={handleSaveConfig}
+              disabled={savingConfig}
+            >
+              {savingConfig ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+              Save All Settings
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Pantry & Bulk Inventory Items Settings */}
+        <Card className="border-0 shadow-lg bg-white/80 backdrop-blur-sm rounded-[2rem]">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Package className="w-5 h-5 text-primary" />
+              Pantry & Bulk Inventory Items
+            </CardTitle>
+            <CardDescription>
+              Configure the specific items bought in bulk that are tracked in the pantry.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="bulkTrackableItems">Bulk Trackable Items</Label>
+              <Input 
+                id="bulkTrackableItems"
+                placeholder="e.g. Rice, Potato, Onion, Oil, Dal, Flour"
+                className="h-12 bg-white/50 border-slate-200 text-sm font-semibold focus-visible:ring-primary focus-visible:border-primary rounded-2xl"
+                value={bulkTrackableItems}
+                onChange={(e) => setBulkTrackableItems(e.target.value)}
+              />
+              <p className="text-[10px] text-slate-400 font-medium ml-1">
+                Enter items separated by commas. These will be available as direct dropdown selections when logging bazaar duties or stocking.
+              </p>
             </div>
 
             <Button 

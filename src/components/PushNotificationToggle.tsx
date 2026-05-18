@@ -4,10 +4,25 @@ import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
-import { Bell, BellOff, Droplets, ShoppingBag } from 'lucide-react'
+import { Bell, BellOff, Droplets, ShoppingBag, Send, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { saveSubscription, updateNotificationPrefs } from '@/app/actions/push'
+import { saveSubscription, updateNotificationPrefs, sendNotificationToUser } from '@/app/actions/push'
 import { createClient } from '@/utils/supabase/client'
+
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+  const base64 = (base64String + padding)
+    .replace(/\-/g, '+')
+    .replace(/_/g, '/')
+
+  const rawData = window.atob(base64)
+  const outputArray = new Uint8Array(rawData.length)
+
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i)
+  }
+  return outputArray
+}
 
 export default function PushNotificationToggle() {
   const [isSubscribed, setIsSubscribed] = useState(false)
@@ -17,6 +32,7 @@ export default function PushNotificationToggle() {
     bazaar: true
   })
   const [fetchingPrefs, setFetchingPrefs] = useState(true)
+  const [sendingTest, setSendingTest] = useState(false)
 
   const supabase = createClient()
 
@@ -49,23 +65,44 @@ export default function PushNotificationToggle() {
 
   const handleSubscribe = async () => {
     setIsLoading(true)
+    console.log('--- MMS Push Subscription Start ---')
     try {
       if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        console.error('Push API not supported in this browser.')
         throw new Error('Push notifications are not supported by this browser.')
       }
 
+      console.log('Checking serviceWorker.ready...')
       const registration = await navigator.serviceWorker.ready
+      console.log('ServiceWorker is ready:', registration)
+
+      console.log('Requesting notification permission...')
       const permission = await window.Notification.requestPermission()
+      console.log('Notification permission status:', permission)
       if (permission !== 'granted') {
         throw new Error('Permission not granted for Notification')
       }
 
+      const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+      console.log('Loaded VAPID public key:', vapidPublicKey)
+      if (!vapidPublicKey) {
+        throw new Error('VAPID public key is missing from environment variables')
+      }
+
+      console.log('Converting VAPID key to Uint8Array...')
+      const convertedKey = urlBase64ToUint8Array(vapidPublicKey)
+      console.log('Converted key length:', convertedKey.length, 'values:', Array.from(convertedKey).slice(0, 5))
+
+      console.log('Attempting pushManager.subscribe...')
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+        applicationServerKey: convertedKey
       })
+      console.log('Successfully subscribed in browser! Subscription object:', subscription)
 
+      console.log('Saving subscription to database via server action...')
       const result = await saveSubscription(JSON.parse(JSON.stringify(subscription)))
+      console.log('Database save result:', result)
       
       if (result.success) {
         setIsSubscribed(true)
@@ -75,9 +112,10 @@ export default function PushNotificationToggle() {
       }
 
     } catch (err: any) {
-      console.error(err)
+      console.error('--- MMS Push Subscription Error ---', err)
       toast.error(err.message || 'Failed to enable notifications')
     } finally {
+      console.log('--- MMS Push Subscription End ---')
       setIsLoading(false)
     }
   }
@@ -97,6 +135,31 @@ export default function PushNotificationToggle() {
       toast.error('Failed to disable notifications')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const handleSendTestNotification = async () => {
+    setSendingTest(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Not authenticated')
+
+      const res = await sendNotificationToUser(user.id, 'water', {
+        title: 'MMS Notification Test 🔔',
+        body: 'Awesome! Real-time push notifications are fully working and verified!',
+        url: '/dashboard'
+      })
+
+      if (res.success) {
+        toast.success('Test notification triggered successfully!')
+      } else {
+        throw new Error(res.error || 'Failed to send test push')
+      }
+    } catch (err: any) {
+      console.error(err)
+      toast.error(err.message || 'Failed to send test push')
+    } finally {
+      setSendingTest(false)
     }
   }
 
@@ -140,6 +203,25 @@ export default function PushNotificationToggle() {
             {isSubscribed ? 'Unregister' : 'Register Device'}
           </Button>
         </div>
+
+        {isSubscribed && (
+          <div className="pt-3 border-t border-slate-200 mt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSendTestNotification}
+              disabled={sendingTest}
+              className="w-full rounded-xl h-9 text-[10px] font-black uppercase tracking-wider gap-1.5 border-dashed border-primary/20 hover:border-primary/30 text-primary hover:bg-primary/5"
+            >
+              {sendingTest ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Send className="w-3.5 h-3.5" />
+              )}
+              Send Test Notification
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Granular Toggles - Only show if subscribed */}
@@ -159,6 +241,7 @@ export default function PushNotificationToggle() {
           <Switch 
             checked={prefs.water} 
             onCheckedChange={() => togglePref('water')} 
+            disabled={!isSubscribed}
           />
         </div>
 
@@ -175,6 +258,7 @@ export default function PushNotificationToggle() {
           <Switch 
             checked={prefs.bazaar} 
             onCheckedChange={() => togglePref('bazaar')} 
+            disabled={!isSubscribed}
           />
         </div>
       </div>

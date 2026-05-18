@@ -4,6 +4,7 @@ export interface Member {
   joined_at: string
   is_inactive?: boolean
   inactive_until?: string | null
+  role?: string
 }
 
 export interface DutyRecord {

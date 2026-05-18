@@ -38,7 +38,15 @@ self.addEventListener('fetch', (event) => {
         .catch(() => caches.match(event.request))
     )
   } else {
-    // Cache First for other assets (JS, CSS, Images)
+    // Avoid caching Next.js build chunks or webpack hot-reload files to prevent stale server action ID mismatches
+    const isNextInternal = event.request.url.includes('_next/') || event.request.url.includes('webpack')
+    
+    if (isNextInternal) {
+      event.respondWith(fetch(event.request))
+      return
+    }
+
+    // Cache First for other static assets (Images, Fonts, CSS)
     event.respondWith(
       caches.match(event.request).then((cached) => {
         return cached || fetch(event.request).then((response) => {

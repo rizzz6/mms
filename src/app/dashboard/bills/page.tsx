@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import { 
   ChevronRight, Calendar, CreditCard, Download, AlertTriangle, 
-  Loader2, DollarSign, ArrowRightLeft, FileSpreadsheet, Trash2
+  Loader2, IndianRupee, ArrowRightLeft, FileSpreadsheet, Trash2
 } from 'lucide-react'
 import { getPenalties, forgivePenalty } from '@/app/actions/penalties'
 
@@ -50,10 +50,10 @@ export default function MemberBillsHistoryPage() {
 
       // Fetch user profile
       const { data: profileData, error: profileErr } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single()
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .single()
 
       if (profileErr) {
         toast.error('Failed to load profile balance')
@@ -63,10 +63,10 @@ export default function MemberBillsHistoryPage() {
 
       // Fetch monthly bills history
       const { data: billsData, error: billsErr } = await supabase
-        .from('monthly_bills')
-        .select('*, billing_cycles(*)')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
+      .from('monthly_bills')
+      .select('*, billing_cycles(*)')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
 
       if (billsErr) {
         toast.error('Failed to load billing history')
@@ -191,29 +191,29 @@ export default function MemberBillsHistoryPage() {
         )}
 
         {/* Current Active Deposit card */}
-        <Card className="border-0 shadow-xl overflow-hidden bg-slate-950 text-white relative rounded-[2.5rem]">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-primary/20 rounded-full -mr-32 -mt-32 blur-3xl" />
+        <Card className="border-0 shadow-xl overflow-hidden bg-primary text-white relative rounded-[2.5rem]">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32 blur-3xl" />
           
           <div className="p-8 relative z-10 space-y-6">
             <div className="flex items-center space-x-4">
               <div className="bg-white/10 p-3 rounded-[1.5rem] backdrop-blur-md border border-white/10 shadow-inner">
-                <CreditCard className="w-6 h-6 text-white" />
+                <CreditCard className="w-6 h-6 text-accent" />
               </div>
               <div>
-                <p className="text-white/40 text-[9px] uppercase font-black tracking-widest">Active Deposit</p>
-                <h2 className="text-2xl font-black tracking-tight">{profile?.full_name}</h2>
+                <p className="text-white/60 text-[9px] uppercase font-black tracking-widest">Active Deposit</p>
+                <h2 className="text-2xl font-black tracking-tight text-white">{profile?.full_name}</h2>
               </div>
             </div>
             
             <div className="bg-white/5 rounded-2xl p-4 backdrop-blur-md border border-white/10 flex items-center justify-between">
               <div>
                 <span className="text-[10px] font-black uppercase text-white/50 tracking-wider">Available Balance</span>
-                <p className={`text-3xl font-black tracking-tight mt-1 ${isBalanceNegative ? 'text-red-400' : 'text-green-400'}`}>
+                <p className={`text-3xl font-black tracking-tight mt-1 ${isBalanceNegative ? 'text-red-400' : 'text-accent'}`}>
                   ₹{profile?.balance || 0}
                 </p>
               </div>
               <div className="bg-white/10 p-2.5 rounded-xl text-white">
-                <DollarSign className="w-6 h-6" />
+                <IndianRupee className="w-6 h-6 text-accent" />
               </div>
             </div>
           </div>

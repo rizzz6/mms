@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { 
   ChevronRight, Megaphone, Utensils, Vote, Plus, Trash2, Loader2, 
-  CheckCircle, HelpCircle, Star, AlertTriangle
+  CheckCircle, HelpCircle, Pin, AlertTriangle
 } from 'lucide-react'
 import { 
   createAnnouncement, deleteAnnouncement, togglePinAnnouncement, 
@@ -259,7 +259,7 @@ export default function ManagerEngagementPage() {
         </div>
         
         <div className="space-y-1">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Engagement Center</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#6A2C70]">Engagement Center</p>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">Manager Board</h1>
         </div>
       </div>
@@ -267,7 +267,7 @@ export default function ManagerEngagementPage() {
       <div className="max-w-md mx-auto px-4 space-y-6">
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-20 space-y-4">
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            <Loader2 className="w-8 h-8 animate-spin text-[#6A2C70]" />
             <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Loading Engagement Data...</p>
           </div>
         ) : (
@@ -276,7 +276,7 @@ export default function ManagerEngagementPage() {
             <Card className="border-0 shadow-sm bg-white rounded-[2rem] border border-slate-100">
               <CardHeader className="p-5 pb-3">
                 <CardTitle className="text-sm font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
-                  <Utensils className="w-4 h-4 text-emerald-500" />
+                  <Utensils className="w-4 h-4 text-[#F08A5D]" />
                   Daily Culinary Menu Board
                 </CardTitle>
                 <CardDescription className="text-[10px]">
@@ -290,7 +290,7 @@ export default function ManagerEngagementPage() {
                     <input 
                       id="menu-date"
                       type="date"
-                      className="w-full h-11 bg-slate-50 border border-slate-200 rounded-2xl px-4 text-xs font-bold text-slate-700 outline-none focus:border-emerald-500 transition-all"
+                      className="w-full h-11 bg-slate-50 border border-slate-200 rounded-2xl px-4 text-xs font-bold text-slate-700 outline-none focus:border-[#F08A5D] transition-all"
                       value={menuDate}
                       onChange={(e) => setMenuDate(e.target.value)}
                     />
@@ -303,7 +303,7 @@ export default function ManagerEngagementPage() {
                         id="lunch-menu"
                         placeholder="Rice, Fish, Dal"
                         rows={2}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3 text-xs font-semibold text-slate-700 outline-none resize-none focus:border-emerald-500 transition-all"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3 text-xs font-semibold text-slate-700 outline-none resize-none focus:border-[#F08A5D] transition-all"
                         value={lunchMenu}
                         onChange={(e) => setLunchMenu(e.target.value)}
                       />
@@ -314,7 +314,7 @@ export default function ManagerEngagementPage() {
                         id="dinner-menu"
                         placeholder="Roti, Chicken Curry"
                         rows={2}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3 text-xs font-semibold text-slate-700 outline-none resize-none focus:border-emerald-500 transition-all"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3 text-xs font-semibold text-slate-700 outline-none resize-none focus:border-[#F08A5D] transition-all"
                         value={dinnerMenu}
                         onChange={(e) => setDinnerMenu(e.target.value)}
                       />
@@ -324,7 +324,7 @@ export default function ManagerEngagementPage() {
                   <Button 
                     type="submit" 
                     disabled={isSubmitting}
-                    className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase text-[10px] tracking-widest rounded-2xl shadow-lg shadow-emerald-600/15"
+                    className="w-full h-11 bg-[#6A2C70] hover:bg-[#4D1C54] text-white font-black uppercase text-[10px] tracking-widest rounded-2xl shadow-lg shadow-[#6A2C70]/15"
                   >
                     {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle className="w-4 h-4 mr-2" />}
                     Save Daily Menu Card
@@ -337,7 +337,7 @@ export default function ManagerEngagementPage() {
             <Card className="border-0 shadow-sm bg-white rounded-[2rem] border border-slate-100">
               <CardHeader className="p-5 pb-3">
                 <CardTitle className="text-sm font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
-                  <Megaphone className="w-4 h-4 text-amber-500" />
+                  <Megaphone className="w-4 h-4 text-[#F08A5D]" />
                   Publish Announcements
                 </CardTitle>
                 <CardDescription className="text-[10px]">
@@ -351,7 +351,7 @@ export default function ManagerEngagementPage() {
                     <Input 
                       id="ann-title"
                       placeholder="e.g. Shopper Shift Change or Roster Alert"
-                      className="h-11 rounded-2xl bg-slate-50 border-slate-200 text-xs font-semibold text-slate-700 focus-visible:ring-amber-500/10 focus-visible:border-amber-500"
+                      className="h-11 rounded-2xl bg-slate-50 border-slate-200 text-xs font-semibold text-slate-700 focus-visible:ring-[#F08A5D]/10 focus-visible:border-[#F08A5D]"
                       value={annTitle}
                       onChange={(e) => setAnnTitle(e.target.value)}
                     />
@@ -363,22 +363,22 @@ export default function ManagerEngagementPage() {
                       id="ann-content"
                       placeholder="Type details..."
                       rows={3}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-xs font-semibold text-slate-700 outline-none resize-none focus:border-amber-500 transition-all"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-xs font-semibold text-slate-700 outline-none resize-none focus:border-[#F08A5D] transition-all"
                       value={annContent}
                       onChange={(e) => setAnnContent(e.target.value)}
                     />
                   </div>
 
-                  <div className="flex items-center gap-2 bg-amber-50/20 border border-amber-100/40 p-3.5 rounded-2xl">
+                  <div className="flex items-center gap-2 bg-[#F08A5D]/5 border border-[#F08A5D]/10 p-3.5 rounded-2xl">
                     <input 
                       id="ann-pin"
                       type="checkbox"
-                      className="w-4 h-4 text-amber-500 rounded border-slate-200 outline-none accent-amber-500"
+                      className="w-4 h-4 text-[#F08A5D] rounded border-slate-200 outline-none accent-[#F08A5D]"
                       checked={annPinned}
                       onChange={(e) => setAnnPinned(e.target.checked)}
                     />
-                    <Label htmlFor="ann-pin" className="text-xs font-bold text-amber-800 cursor-pointer flex items-center gap-1">
-                      <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                    <Label htmlFor="ann-pin" className="text-xs font-bold text-[#6A2C70] cursor-pointer flex items-center gap-1.5">
+                      <Pin className="w-3.5 h-3.5 text-[#F08A5D] fill-[#F08A5D]" />
                       Pin to top of member dashboards
                     </Label>
                   </div>
@@ -386,10 +386,10 @@ export default function ManagerEngagementPage() {
                   <Button 
                     type="submit" 
                     disabled={isSubmitting}
-                    className="w-full h-11 bg-amber-500 hover:bg-amber-600 text-white font-black uppercase text-[10px] tracking-widest rounded-2xl shadow-lg shadow-amber-500/15"
+                    className="w-full h-11 bg-[#6A2C70] hover:bg-[#4D1C54] text-white font-black uppercase text-[10px] tracking-widest rounded-2xl shadow-lg shadow-[#6A2C70]/15"
                   >
                     {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Megaphone className="w-4 h-4 mr-2" />}
-                    Broadcast Notice 🚀
+                    Broadcast Notice
                   </Button>
                 </form>
               </CardContent>
@@ -399,7 +399,7 @@ export default function ManagerEngagementPage() {
             <Card className="border-0 shadow-sm bg-white rounded-[2rem] border border-slate-100">
               <CardHeader className="p-5 pb-3">
                 <CardTitle className="text-sm font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
-                  <Vote className="w-4 h-4 text-indigo-500" />
+                  <Vote className="w-4 h-4 text-[#B83B5E]" />
                   Launch Voting Poll
                 </CardTitle>
                 <CardDescription className="text-[10px]">
@@ -413,7 +413,7 @@ export default function ManagerEngagementPage() {
                     <Input 
                       id="poll-question"
                       placeholder="e.g. Chicken Biryani vs Mutton Rezala?"
-                      className="h-11 rounded-2xl bg-slate-50 border-slate-200 text-xs font-semibold text-slate-700 focus-visible:ring-indigo-500/10 focus-visible:border-indigo-500"
+                      className="h-11 rounded-2xl bg-slate-50 border-slate-200 text-xs font-semibold text-slate-700 focus-visible:ring-[#B83B5E]/10 focus-visible:border-[#B83B5E]"
                       value={pollQuestion}
                       onChange={(e) => setPollQuestion(e.target.value)}
                     />
@@ -426,7 +426,7 @@ export default function ManagerEngagementPage() {
                       <div key={index} className="flex gap-2">
                         <Input 
                           placeholder={`Option ${index + 1}`}
-                          className="h-10 rounded-xl bg-slate-50 border-slate-200 text-xs font-semibold text-slate-700 focus-visible:ring-indigo-500/10 focus-visible:border-indigo-500"
+                          className="h-10 rounded-xl bg-slate-50 border-slate-200 text-xs font-semibold text-slate-700 focus-visible:ring-[#B83B5E]/10 focus-visible:border-[#B83B5E]"
                           value={opt}
                           onChange={(e) => handlePollOptionChange(index, e.target.value)}
                         />
@@ -460,7 +460,7 @@ export default function ManagerEngagementPage() {
                     <input 
                       id="poll-cutoff"
                       type="datetime-local"
-                      className="w-full h-11 bg-slate-50 border border-slate-200 rounded-2xl px-4 text-xs font-bold text-slate-700 outline-none focus:border-indigo-500 transition-all"
+                      className="w-full h-11 bg-slate-50 border border-slate-200 rounded-2xl px-4 text-xs font-bold text-slate-700 outline-none focus:border-[#B83B5E] transition-all"
                       value={pollExpiry}
                       onChange={(e) => setPollExpiry(e.target.value)}
                     />
@@ -469,10 +469,10 @@ export default function ManagerEngagementPage() {
                   <Button 
                     type="submit" 
                     disabled={isSubmitting}
-                    className="w-full h-11 bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase text-[10px] tracking-widest rounded-2xl shadow-lg shadow-indigo-600/15"
+                    className="w-full h-11 bg-[#6A2C70] hover:bg-[#4D1C54] text-white font-black uppercase text-[10px] tracking-widest rounded-2xl shadow-lg shadow-[#6A2C70]/15"
                   >
                     {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Vote className="w-4 h-4 mr-2" />}
-                    Launch Active Poll 🗳️
+                    Launch Active Poll
                   </Button>
                 </form>
               </CardContent>
@@ -491,7 +491,7 @@ export default function ManagerEngagementPage() {
                       <div className="flex items-center gap-2">
                         <h3 className="font-bold text-slate-800 text-sm truncate">{ann.title}</h3>
                         {ann.pinned && (
-                          <Badge className="bg-amber-100 text-amber-700 font-bold border-0 text-[8px] h-4">PINNED</Badge>
+                          <Badge className="bg-[#F9ED69]/20 text-[#6A2C70] font-bold border-0 text-[8px] h-4">PINNED</Badge>
                         )}
                       </div>
                       <p className="text-[10px] text-slate-500 mt-1 line-clamp-2">{ann.content}</p>
@@ -502,10 +502,10 @@ export default function ManagerEngagementPage() {
                         variant="ghost" 
                         size="icon" 
                         onClick={() => handleUnpinAnnouncement(ann.id, ann.pinned)}
-                        className={`h-8 w-8 rounded-lg border border-slate-100 ${ann.pinned ? 'text-amber-500 bg-amber-50/50' : 'text-slate-400'}`}
+                        className={`h-8 w-8 rounded-lg border border-slate-100 ${ann.pinned ? 'text-[#F08A5D] bg-[#F08A5D]/5' : 'text-slate-400'}`}
                         title={ann.pinned ? 'Unpin Notice' : 'Pin to Top'}
                       >
-                        <Star className={`w-3.5 h-3.5 ${ann.pinned ? 'fill-amber-400' : ''}`} />
+                        <Pin className={`w-3.5 h-3.5 ${ann.pinned ? 'fill-[#F08A5D]' : ''}`} />
                       </Button>
                       <Button 
                         variant="ghost" 

@@ -398,3 +398,56 @@ export async function markInventoryItemEmpty(itemId: string) {
     return { success: false, error: error.message }
   }
 }
+
+// 6. Add multiple custom inventory items with starting stock
+export async function addMultipleInventoryItems(
+  items: { name: string; quantity: number; unit: string }[]
+) {
+  try {
+    const { user, profile } = await verifyApprovedUser()
+    const supabase = await createClient()
+
+    const results = []
+    for (const item of items) {
+      const trimmedName = (item.name || '').trim()
+      if (!trimmedName) continue
+
+      const cleanedName = trimmedName.charAt(0).toUpperCase() + trimmedName.slice(1).toLowerCase()
+
+      // 1. Upsert inventory item with starting current_stock
+      const { data: dbItem, error: upsertError } = await supabase
+        .from('inventory_items')
+        .upsert({
+          mess_id: profile.mess_id,
+          item_name: cleanedName,
+          category: 'Bulk',
+          unit: item.unit || 'kg',
+          current_stock: item.quantity || 0,
+          low_stock_threshold: 2 // default threshold
+        }, { onConflict: 'mess_id,item_name' })
+        .select()
+        .single()
+
+      if (upsertError) throw upsertError
+
+      // 2. If quantity > 0, log a purchase log so prediction metrics calibrate perfectly
+      if (item.quantity > 0 && dbItem) {
+        await supabase
+          .from('inventory_logs')
+          .insert({
+            item_id: dbItem.id,
+            log_type: 'purchase',
+            quantity_changed: item.quantity,
+            recorded_by: user.id
+          })
+      }
+      results.push(dbItem)
+    }
+
+    return { success: true, results }
+  } catch (error: any) {
+    console.error('Error creating multiple items:', error)
+    return { success: false, error: error.message }
+  }
+}
+

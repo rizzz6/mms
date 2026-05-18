@@ -159,11 +159,11 @@ export default function AccountSettingsPage() {
             </button>
           </div>
           <Button 
-            className="w-full h-11 font-bold shadow-md bg-slate-900 hover:bg-slate-800 text-white" 
+            className="w-full h-11 font-bold shadow-md border-0 bg-primary hover:bg-primary/90 text-white" 
             onClick={handleUpdateProfile}
             disabled={savingProfile}
           >
-            {savingProfile ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+            {savingProfile ? <Loader2 className="mr-2 h-4 w-4 animate-spin text-white" /> : <Save className="mr-2 h-4 w-4" />}
             Update Profile
           </Button>
         </CardContent>

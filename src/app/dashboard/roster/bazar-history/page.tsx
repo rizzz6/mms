@@ -75,7 +75,7 @@ export default function BazarHistoryPage() {
         </div>
       </div>
 
-      <Card className="bg-primary text-white border-0 shadow-lg overflow-hidden">
+      <Card className="bg-[#6A2C70] text-white border-0 shadow-lg overflow-hidden">
         <CardContent className="p-6">
           <div className="flex justify-between items-center">
             <div>
@@ -94,7 +94,7 @@ export default function BazarHistoryPage() {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
         <Input 
           placeholder="Search items, members or dates..." 
-          className="pl-10 h-11 bg-white border-slate-200 rounded-xl shadow-sm focus:ring-primary"
+          className="pl-10 h-11 bg-white border-slate-200 rounded-xl shadow-sm focus:ring-[#6A2C70]"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -102,7 +102,7 @@ export default function BazarHistoryPage() {
 
       {loading ? (
         <div className="flex justify-center py-20">
-          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <Loader2 className="w-8 h-8 animate-spin text-[#6A2C70]" />
         </div>
       ) : (
         <div className="space-y-3">
@@ -120,9 +120,9 @@ export default function BazarHistoryPage() {
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-bold text-slate-700">{log.profiles.full_name}</span>
                         {log.verified ? (
-                          <Badge className="bg-green-100 text-green-700 hover:bg-green-100 text-[8px] h-4 border-0">VERIFIED</Badge>
+                          <Badge className="bg-[#6A2C70]/10 text-[#6A2C70] hover:bg-[#6A2C70]/20 text-[8px] h-4 border-0">VERIFIED</Badge>
                         ) : (
-                          <Badge variant="outline" className="text-[8px] h-4 border-amber-200 text-amber-600 bg-amber-50">PENDING</Badge>
+                          <Badge variant="outline" className="text-[8px] h-4 border-[#F08A5D]/20 text-[#F08A5D] bg-[#F08A5D]/5">PENDING</Badge>
                         )}
                       </div>
                       <div className="flex items-center gap-2 text-slate-400">
@@ -133,7 +133,7 @@ export default function BazarHistoryPage() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="text-lg font-black text-primary">₹{log.amount}</p>
+                      <p className="text-lg font-black text-[#6A2C70]">₹{log.amount}</p>
                     </div>
                   </div>
                   <div className="bg-slate-50 p-2 rounded-lg">

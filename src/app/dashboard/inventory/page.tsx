@@ -6,15 +6,14 @@ import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { 
   ChevronRight, Plus, Trash2, Loader2, Sparkles,
   CheckCircle, ShieldAlert, ArrowDownToLine, Flame
 } from 'lucide-react'
 import { 
-  getInventoryItemsWithPredictions, addCustomInventoryItem, 
-  restockInventoryItem, markInventoryItemEmpty 
+  getInventoryItemsWithPredictions, 
+  restockInventoryItem, markInventoryItemEmpty, addMultipleInventoryItems
 } from '@/app/actions/inventory'
 
 export default function PantryInventoryPage() {
@@ -22,11 +21,10 @@ export default function PantryInventoryPage() {
   const [items, setItems] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
   
-  // Custom item form
-  const [newItemName, setNewItemName] = useState('')
-  const [newItemCategory, setNewItemCategory] = useState('Staple')
-  const [newItemUnit, setNewItemUnit] = useState('kg')
-  const [newItemThreshold, setNewItemThreshold] = useState('2')
+  // Custom item form (supports multiple items at once)
+  const [pantryRows, setPantryRows] = useState<{ name: string; quantity: string; unit: string }[]>([
+    { name: '', quantity: '', unit: 'kg' }
+  ])
   const [isSubmittingItem, setIsSubmittingItem] = useState(false)
 
   // Restock form state
@@ -65,19 +63,29 @@ export default function PantryInventoryPage() {
 
   const handleCreateItem = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!newItemName) return toast.error('Pantry item name is required')
+    
+    // Filter rows with names entered
+    const validRows = pantryRows
+      .filter(row => row.name.trim() !== '')
+      .map(row => ({
+        name: row.name.trim(),
+        quantity: parseFloat(row.quantity) || 0,
+        unit: row.unit
+      }))
+
+    if (validRows.length === 0) {
+      return toast.error('Please enter at least one pantry item name')
+    }
 
     setIsSubmittingItem(true)
-    const thresholdNum = parseFloat(newItemThreshold) || 2
-    const res = await addCustomInventoryItem(newItemName, newItemCategory, newItemUnit, thresholdNum)
+    const res = await addMultipleInventoryItems(validRows)
     
     if (res.success) {
-      toast.success(`${newItemName} registered successfully!`)
-      setNewItemName('')
-      setNewItemThreshold('2')
+      toast.success(`Successfully registered ${validRows.length} pantry item(s)!`)
+      setPantryRows([{ name: '', quantity: '', unit: 'kg' }])
       loadInventory()
     } else {
-      toast.error(res.error || 'Failed to create item')
+      toast.error(res.error || 'Failed to create items')
     }
     setIsSubmittingItem(false)
   }
@@ -136,7 +144,7 @@ export default function PantryInventoryPage() {
         </div>
         
         <div className="space-y-1">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Pantry Analytics</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#6A2C70]">Pantry Analytics</p>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">Stock & Inventory</h1>
         </div>
       </div>
@@ -144,7 +152,7 @@ export default function PantryInventoryPage() {
       <div className="max-w-md mx-auto px-4 space-y-6">
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-20 space-y-4">
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            <Loader2 className="w-8 h-8 animate-spin text-[#6A2C70]" />
             <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Analyzing Pantry Stock...</p>
           </div>
         ) : (
@@ -153,79 +161,107 @@ export default function PantryInventoryPage() {
             <Card className="border-0 shadow-sm bg-white rounded-[2.5rem] border border-slate-100 overflow-hidden">
               <CardHeader className="p-6 pb-3">
                 <CardTitle className="text-sm font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
-                  <Plus className="w-4 h-4 text-emerald-500" />
-                  Add New Pantry Item
+                  <Plus className="w-4 h-4 text-[#F08A5D]" />
+                  Add New Pantry Items
                 </CardTitle>
                 <CardDescription className="text-[10px]">
-                  Add a custom staple item to the tracking board.
+                  Specify items and quantities below. Click the plus button to add another row.
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-6 pt-0">
                 <form onSubmit={handleCreateItem} className="space-y-4">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5 col-span-2">
-                      <Label htmlFor="item-name" className="text-[10px] font-bold uppercase text-slate-400">Item Name</Label>
-                      <Input 
-                        id="item-name"
-                        placeholder="Rice, Oil, Potatoes..."
-                        className="h-11 rounded-2xl bg-slate-50 border-slate-200 text-xs font-semibold text-slate-700 focus-visible:ring-emerald-500/10 focus-visible:border-emerald-500"
-                        value={newItemName}
-                        onChange={(e) => setNewItemName(e.target.value)}
-                      />
-                    </div>
+                  <div className="space-y-3">
+                    {pantryRows.map((row, index) => (
+                      <div key={index} className="grid grid-cols-[1fr_56px_72px_auto] gap-2 items-center w-full">
+                        <div>
+                          <Input 
+                            placeholder="Item Name (e.g. Rice)"
+                            className="h-11 rounded-2xl bg-slate-50 border-slate-200 text-xs font-semibold text-slate-700 focus-visible:ring-[#6A2C70]/10 focus-visible:border-[#6A2C70] w-full"
+                            value={row.name}
+                            onChange={(e) => {
+                              const updated = [...pantryRows]
+                              updated[index].name = e.target.value
+                              setPantryRows(updated)
+                            }}
+                          />
+                        </div>
 
-                    <div className="space-y-1.5">
-                      <Label htmlFor="item-category" className="text-[10px] font-bold uppercase text-slate-400">Category</Label>
-                      <select
-                        id="item-category"
-                        className="w-full h-11 bg-slate-50 border border-slate-200 rounded-2xl px-3.5 text-xs font-bold text-slate-700 outline-none focus:border-emerald-500 transition-all"
-                        value={newItemCategory}
-                        onChange={(e) => setNewItemCategory(e.target.value)}
-                      >
-                        <option value="Staple">Staple</option>
-                        <option value="Spice">Spice</option>
-                        <option value="Vegetable">Vegetable</option>
-                        <option value="Meat">Meat</option>
-                        <option value="Others">Others</option>
-                      </select>
-                    </div>
+                        <div>
+                          <Input 
+                            type="number"
+                            step="any"
+                            placeholder="Qty"
+                            className="h-11 rounded-2xl bg-slate-50 border-slate-200 text-xs font-semibold text-slate-700 focus-visible:ring-[#6A2C70]/10 focus-visible:border-[#6A2C70] w-full px-1.5 text-center"
+                            value={row.quantity}
+                            onChange={(e) => {
+                              const updated = [...pantryRows]
+                              updated[index].quantity = e.target.value
+                              setPantryRows(updated)
+                            }}
+                          />
+                        </div>
 
-                    <div className="space-y-1.5">
-                      <Label htmlFor="item-unit" className="text-[10px] font-bold uppercase text-slate-400">Unit</Label>
-                      <select
-                        id="item-unit"
-                        className="w-full h-11 bg-slate-50 border border-slate-200 rounded-2xl px-3.5 text-xs font-bold text-slate-700 outline-none focus:border-emerald-500 transition-all"
-                        value={newItemUnit}
-                        onChange={(e) => setNewItemUnit(e.target.value)}
-                      >
-                        <option value="kg">kg</option>
-                        <option value="liters">liters</option>
-                        <option value="grams">grams</option>
-                        <option value="packets">packets</option>
-                        <option value="pieces">pieces</option>
-                      </select>
-                    </div>
+                        <div>
+                          <select
+                            className="w-full h-11 bg-slate-50 border border-slate-200 rounded-2xl px-1 text-[10px] font-extrabold text-slate-700 outline-none focus:border-[#6A2C70] transition-all"
+                            value={row.unit}
+                            onChange={(e) => {
+                              const updated = [...pantryRows]
+                              updated[index].unit = e.target.value
+                              setPantryRows(updated)
+                            }}
+                          >
+                            <option value="kg">kg</option>
+                            <option value="liters">liters</option>
+                            <option value="grams">grams</option>
+                            <option value="packets">packets</option>
+                            <option value="pieces">pieces</option>
+                          </select>
+                        </div>
 
-                    <div className="space-y-1.5 col-span-2">
-                      <Label htmlFor="item-threshold" className="text-[10px] font-bold uppercase text-slate-400">Low Stock Threshold Alert</Label>
-                      <Input 
-                        id="item-threshold"
-                        type="number"
-                        placeholder="Alert if stock drops below this value"
-                        className="h-11 rounded-2xl bg-slate-50 border-slate-200 text-xs font-semibold text-slate-700 focus-visible:ring-emerald-500/10 focus-visible:border-emerald-500"
-                        value={newItemThreshold}
-                        onChange={(e) => setNewItemThreshold(e.target.value)}
-                      />
-                    </div>
+                        {/* Compact actions container */}
+                        <div className="flex items-center gap-1 shrink-0">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            onClick={() => {
+                              setPantryRows([...pantryRows, { name: '', quantity: '', unit: 'kg' }])
+                            }}
+                            className="w-11 h-11 rounded-2xl border-[#6A2C70]/20 hover:border-[#6A2C70] text-[#6A2C70] hover:bg-[#6A2C70]/5"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </Button>
+
+                          {pantryRows.length > 1 ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                const updated = [...pantryRows]
+                                updated.splice(index, 1)
+                                setPantryRows(updated)
+                              }}
+                              className="w-11 h-11 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-2xl"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          ) : (
+                            <div className="w-11 h-11" /> /* Keeps absolute horizontal layout matching */
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
 
                   <Button 
                     type="submit" 
                     disabled={isSubmittingItem}
-                    className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase text-[10px] tracking-widest rounded-2xl shadow-lg shadow-emerald-600/15"
+                    className="w-full h-11 bg-[#6A2C70] hover:bg-[#4D1C54] text-white font-black uppercase text-[10px] tracking-widest rounded-2xl shadow-lg shadow-[#6A2C70]/15"
                   >
                     {isSubmittingItem ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <CheckCircle className="w-4 h-4 mr-2" />}
-                    Register Pantry Item
+                    Register Pantry Items
                   </Button>
                 </form>
               </CardContent>
@@ -233,17 +269,17 @@ export default function PantryInventoryPage() {
 
             {/* 2. Restock Modal Form Triggered Inline */}
             {restockItemId && (
-              <Card className="border-0 shadow-md bg-indigo-50/40 rounded-[2.5rem] border border-indigo-100 overflow-hidden animate-in fade-in zoom-in duration-200">
+              <Card className="border-0 shadow-md bg-[#6A2C70]/5 rounded-[2.5rem] border border-[#6A2C70]/10 overflow-hidden animate-in fade-in zoom-in duration-200">
                 <CardContent className="p-6 space-y-4">
                   <div className="flex justify-between items-center">
-                    <h3 className="text-xs font-black uppercase tracking-wider text-indigo-700 flex items-center gap-1.5">
+                    <h3 className="text-xs font-black uppercase tracking-wider text-[#6A2C70] flex items-center gap-1.5">
                       <ArrowDownToLine className="w-4 h-4" />
                       Restock Pantry Item
                     </h3>
                     <Button 
                       variant="ghost" 
                       onClick={() => setRestockItemId(null)}
-                      className="text-[10px] font-black uppercase text-indigo-500 hover:text-indigo-600"
+                      className="text-[10px] font-black uppercase text-[#B83B5E] hover:text-[#B83B5E]/80"
                     >
                       Cancel
                     </Button>
@@ -256,7 +292,7 @@ export default function PantryInventoryPage() {
                         step="any"
                         placeholder="Quantity added..."
                         autoFocus
-                        className="h-11 rounded-2xl bg-white border-indigo-200 text-xs font-semibold text-slate-700 focus-visible:ring-indigo-500/10 focus-visible:border-indigo-500"
+                        className="h-11 rounded-2xl bg-white border-[#6A2C70]/20 text-xs font-semibold text-slate-700 focus-visible:ring-[#6A2C70]/10 focus-visible:border-[#6A2C70]"
                         value={restockQty}
                         onChange={(e) => setRestockQty(e.target.value)}
                       />
@@ -264,7 +300,7 @@ export default function PantryInventoryPage() {
                     <Button 
                       type="submit"
                       disabled={isSubmittingRestock}
-                      className="h-11 px-6 bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase text-[10px] tracking-widest rounded-2xl shadow-lg shadow-indigo-600/15"
+                      className="h-11 px-6 bg-[#6A2C70] hover:bg-[#4D1C54] text-white font-black uppercase text-[10px] tracking-widest rounded-2xl shadow-lg shadow-[#6A2C70]/15"
                     >
                       {isSubmittingRestock ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Log'}
                     </Button>
@@ -291,9 +327,8 @@ export default function PantryInventoryPage() {
                       <div className="flex justify-between items-start gap-4">
                         <div className="space-y-1">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-[8px] font-black uppercase tracking-wider text-slate-400">{item.category}</span>
                             {isLow && (
-                              <Badge className="bg-red-100 hover:bg-red-100 text-red-700 border-0 text-[8px] h-4 font-black">
+                              <Badge className="bg-[#B83B5E]/10 hover:bg-[#B83B5E]/20 text-[#B83B5E] border-0 text-[8px] h-4 font-black">
                                 <ShieldAlert className="w-2.5 h-2.5 mr-0.5" /> LOW STOCK
                               </Badge>
                             )}
@@ -311,13 +346,13 @@ export default function PantryInventoryPage() {
 
                       {/* Predictive Forecast Section */}
                       {pred && (
-                        <div className="p-3.5 rounded-2xl bg-indigo-50/20 border border-indigo-100/30 flex items-start gap-3">
-                          <div className="bg-indigo-50 p-2 rounded-xl text-indigo-600 shrink-0 mt-0.5">
-                            <Sparkles className="w-3.5 h-3.5 fill-indigo-400 text-indigo-400 animate-pulse" />
+                        <div className="p-3.5 rounded-2xl bg-[#F08A5D]/5 border border-[#F08A5D]/10 flex items-start gap-3">
+                          <div className="bg-[#F08A5D]/10 p-2 rounded-xl text-[#F08A5D] shrink-0 mt-0.5">
+                            <Sparkles className="w-3.5 h-3.5 fill-[#F08A5D]/60 text-[#F08A5D] animate-pulse" />
                           </div>
                           <div className="space-y-0.5">
-                            <p className="text-[8px] font-black uppercase tracking-widest text-indigo-600 flex items-center gap-1">
-                              <Flame className="w-2.5 h-2.5 text-indigo-500 fill-indigo-500" />
+                            <p className="text-[8px] font-black uppercase tracking-widest text-[#F08A5D] flex items-center gap-1">
+                              <Flame className="w-2.5 h-2.5 text-[#F08A5D] fill-[#F08A5D]" />
                               Predictive Runout Engine
                             </p>
                             <p className="text-[10px] font-semibold text-slate-600 leading-normal">
@@ -346,7 +381,7 @@ export default function PantryInventoryPage() {
                             variant="ghost" 
                             size="sm"
                             onClick={() => handleMarkEmpty(item.id, item.item_name)}
-                            className="h-8 rounded-xl font-black text-[9px] uppercase tracking-wider gap-1 text-red-500 hover:text-red-600 hover:bg-red-50"
+                            className="h-8 rounded-xl font-black text-[9px] uppercase tracking-wider gap-1 text-[#B83B5E] hover:text-[#B83B5E]/90 hover:bg-[#B83B5E]/5"
                           >
                             <Trash2 className="w-3 h-3" /> Mark Empty
                           </Button>

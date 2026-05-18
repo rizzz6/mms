@@ -50,7 +50,7 @@ export default async function RosterLogsPage() {
                     </div>
                     <span className="text-xs font-bold text-slate-700">{log.profiles?.full_name}</span>
                   </div>
-                  <Badge variant="outline" className="text-[9px] uppercase border-red-100 text-red-600 bg-red-50">
+                  <Badge variant="outline" className="text-[9px] uppercase border-[#B83B5E]/20 text-[#B83B5E] bg-[#B83B5E]/5">
                     {log.action}
                   </Badge>
                 </div>

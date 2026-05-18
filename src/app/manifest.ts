@@ -25,5 +25,7 @@ export default function manifest(): MetadataRoute.Manifest {
       },
     ],
     categories: ['finance', 'utilities'],
+    // @ts-expect-error: gcm_sender_id is not officially in MetadataRoute.Manifest but is required for push notifications
+    gcm_sender_id: '103953800507',
   }
 }

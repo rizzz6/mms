@@ -146,14 +146,14 @@ export default function ActiveEngagementFeed({
     <div className="space-y-4">
       {/* 1. Pinned Announcements Section */}
       {announcements.map((ann) => (
-        <Card key={ann.id} className="border-0 shadow-sm bg-amber-50/50 border border-amber-100 rounded-3xl overflow-hidden">
+        <Card key={ann.id} className="border-0 shadow-sm bg-[#F9ED69]/5 border border-[#F9ED69]/20 rounded-3xl overflow-hidden">
           <CardContent className="p-5 flex items-start gap-4">
-            <div className="bg-amber-100 p-2.5 rounded-2xl text-amber-600 shrink-0 mt-0.5">
+            <div className="bg-[#F9ED69]/20 p-2.5 rounded-2xl text-[#6A2C70] shrink-0 mt-0.5">
               <Megaphone className="w-5 h-5" />
             </div>
             <div className="space-y-1.5 min-w-0 flex-1">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[9px] font-black uppercase text-amber-700 tracking-wider">Pinned Announcement</span>
+                <span className="text-[9px] font-black uppercase text-[#6A2C70] tracking-wider">Pinned Announcement</span>
                 <span className="text-[8px] font-bold text-slate-400">
                   {new Date(ann.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
                 </span>
@@ -168,21 +168,21 @@ export default function ActiveEngagementFeed({
       {/* 2. Today's Culinary Menu Card */}
       {menu && (
         <Card className="border-0 shadow-sm bg-white rounded-3xl overflow-hidden border border-slate-100">
-          <CardHeader className="p-4 pb-2 border-b border-slate-50/60 bg-emerald-50/10">
+          <CardHeader className="p-4 pb-2 border-b border-slate-50/60 bg-[#F08A5D]/5">
             <CardTitle className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-2">
-              <Utensils className="w-4 h-4 text-emerald-500" />
+              <Utensils className="w-4 h-4 text-[#F08A5D]" />
               Today&apos;s Culinary Menu
             </CardTitle>
           </CardHeader>
           <CardContent className="p-4 grid grid-cols-2 gap-4">
             <div className="space-y-1.5 p-3 rounded-2xl bg-slate-50/50">
-              <span className="text-[8px] font-black uppercase text-slate-400 tracking-wider">Lunch ☀️</span>
+              <span className="text-[8px] font-black uppercase text-slate-400 tracking-wider">Lunch</span>
               <p className="text-xs font-black text-slate-700 leading-normal">
                 {menu.lunch_menu || 'Not configured'}
               </p>
             </div>
             <div className="space-y-1.5 p-3 rounded-2xl bg-slate-50/50">
-              <span className="text-[8px] font-black uppercase text-slate-400 tracking-wider">Dinner 🌙</span>
+              <span className="text-[8px] font-black uppercase text-slate-400 tracking-wider">Dinner</span>
               <p className="text-xs font-black text-slate-700 leading-normal">
                 {menu.dinner_menu || 'Not configured'}
               </p>
@@ -208,12 +208,12 @@ export default function ActiveEngagementFeed({
             <CardContent className="p-5 space-y-4">
               {/* Poll Header */}
               <div className="flex items-start gap-3">
-                <div className="bg-indigo-50 p-2 rounded-xl text-indigo-600 shrink-0 mt-0.5">
+                <div className="bg-[#6A2C70]/5 p-2 rounded-xl text-[#6A2C70] shrink-0 mt-0.5">
                   <Vote className="w-4 h-4" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-[9px] font-black text-indigo-600 uppercase tracking-widest">Active Mess Poll</span>
+                    <span className="text-[9px] font-black text-[#6A2C70] uppercase tracking-widest">Active Mess Poll</span>
                     {timeRemaining && (
                       <span className="text-[8px] font-bold text-slate-400 flex items-center gap-0.5">
                         <Clock className="w-2.5 h-2.5" />
@@ -241,23 +241,23 @@ export default function ActiveEngagementFeed({
                           onClick={() => votingPollId === null && handleVote(poll.id, opt.id)}
                           className={`relative p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col ${
                             isMyVote 
-                              ? 'border-indigo-200 bg-indigo-50/20 shadow-inner' 
+                              ? 'border-[#6A2C70]/20 bg-[#6A2C70]/5 shadow-inner' 
                               : 'border-slate-100 bg-slate-50/40 hover:bg-slate-50/70'
                           }`}
                         >
                           <div className="flex justify-between items-center z-10 text-xs font-bold">
                             <span className="flex items-center gap-1.5 text-slate-700 truncate max-w-[80%]">
-                              {isMyVote && <CheckCircle2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />}
+                              {isMyVote && <CheckCircle2 className="w-3.5 h-3.5 text-[#6A2C70] shrink-0" />}
                               {opt.option_text}
                             </span>
-                            <span className="text-indigo-600 font-black shrink-0">{percent}%</span>
+                            <span className="text-[#6A2C70] font-black shrink-0">{percent}%</span>
                           </div>
                           
                           {/* Animated Progress bar */}
                           <Progress 
                             value={percent} 
                             className="h-1.5 mt-2 bg-slate-100 z-10" 
-                            indicatorClassName={isMyVote ? 'bg-indigo-600' : 'bg-slate-400'}
+                            indicatorClassName={isMyVote ? 'bg-[#6A2C70]' : 'bg-[#F08A5D]'}
                           />
                         </div>
                       ) : (
@@ -266,9 +266,9 @@ export default function ActiveEngagementFeed({
                           variant="outline"
                           disabled={votingPollId !== null}
                           onClick={() => handleVote(poll.id, opt.id)}
-                          className="w-full h-11 justify-start rounded-2xl border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/10 font-bold text-xs text-slate-700 active:scale-[0.98] transition-all"
+                          className="w-full h-11 justify-start rounded-2xl border-[#6A2C70]/10 bg-gradient-to-r from-white to-[#6A2C70]/5 hover:border-[#6A2C70]/30 hover:bg-[#6A2C70]/10 text-slate-800 font-bold text-xs active:scale-[0.98] transition-all shadow-sm flex items-center gap-2"
                         >
-                          <HelpCircle className="w-4 h-4 mr-2 text-slate-400" />
+                          <HelpCircle className="w-4 h-4 text-[#F08A5D]" />
                           {opt.option_text}
                         </Button>
                       )}
@@ -291,7 +291,7 @@ export default function ActiveEngagementFeed({
                 <div className="pt-2 border-t border-slate-50 flex items-center justify-between">
                   <button 
                     onClick={() => toggleVotersList(poll.id)}
-                    className="text-[9px] font-black text-indigo-600 hover:text-indigo-700 uppercase tracking-wider flex items-center gap-1 outline-none"
+                    className="text-[9px] font-black text-[#6A2C70] hover:text-[#6A2C70]/80 uppercase tracking-wider flex items-center gap-1 outline-none"
                   >
                     {votersExpanded ? (
                       <>Hide Voters List <ChevronUp className="w-3 h-3" /></>

@@ -167,7 +167,7 @@ export default function FundsPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <Loader2 className="w-8 h-8 animate-spin text-[#6A2C70]" />
       </div>
     )
   }
@@ -193,14 +193,14 @@ export default function FundsPage() {
         </div>
         
         <div className="space-y-1">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Financials</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#6A2C70]">Financials</p>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">Funds & Billing</h1>
         </div>
       </div>
 
       <div className="max-w-md mx-auto px-4 space-y-6">
         {/* Total Mess Balance Widget */}
-        <Card className="border-0 shadow-xl shadow-primary/20 bg-gradient-to-br from-primary to-blue-700 text-white rounded-[2rem] overflow-hidden group">
+        <Card className="border-0 shadow-xl shadow-[#6A2C70]/20 bg-[#6A2C70] text-white rounded-[2rem] overflow-hidden group">
           <CardContent className="p-8 relative">
             <div className="absolute -right-6 -top-6 w-32 h-32 bg-white/10 rounded-full blur-3xl group-hover:bg-white/20 transition-all" />
             <div className="relative z-10 space-y-2">
@@ -242,7 +242,7 @@ export default function FundsPage() {
               <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 ml-1">Manager UPI ID</p>
               <div className="bg-slate-50 rounded-2xl p-4 flex items-center justify-between border border-slate-100 group active:bg-slate-100 transition-all cursor-pointer" onClick={copyToClipboard}>
                 <div className="flex items-center gap-3 truncate">
-                  <div className="w-8 h-8 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-primary shadow-sm">
+                  <div className="w-8 h-8 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-[#6A2C70] shadow-sm">
                     <CreditCard className="w-4 h-4" />
                   </div>
                   <span className="text-xs font-black text-slate-700 truncate">{manager?.upi_id || 'Not Set'}</span>
@@ -255,7 +255,7 @@ export default function FundsPage() {
 
             <Button 
               className={`w-full h-14 rounded-2xl font-black uppercase tracking-widest shadow-lg transition-all active:scale-95 flex gap-2 ${
-                showForm ? 'bg-slate-100 text-slate-400 hover:bg-slate-200' : 'bg-primary text-white hover:bg-primary/90 shadow-primary/20'
+                showForm ? 'bg-slate-100 text-slate-400 hover:bg-slate-200' : 'bg-[#6A2C70] text-white hover:bg-[#4D1C54] shadow-[#6A2C70]/20'
               }`}
               onClick={() => setShowForm(!showForm)}
             >
@@ -281,7 +281,7 @@ export default function FundsPage() {
                       id="amount"
                       type="number" 
                       placeholder="0.00" 
-                      className="bg-white/5 border-white/10 text-white placeholder:text-white/20 h-14 rounded-2xl pl-12 text-lg font-black focus:border-primary transition-all" 
+                      className="bg-white/5 border-white/10 text-white placeholder:text-white/20 h-14 rounded-2xl pl-12 text-lg font-black focus:border-[#6A2C70] transition-all" 
                       value={amount}
                       onChange={(e) => setAmount(e.target.value)}
                       required
@@ -297,7 +297,7 @@ export default function FundsPage() {
                   <Input 
                     id="txnid"
                     placeholder="Reference Number" 
-                    className="bg-white/5 border-white/10 text-white placeholder:text-white/20 h-12 rounded-2xl font-bold focus:border-primary transition-all" 
+                    className="bg-white/5 border-white/10 text-white placeholder:text-white/20 h-12 rounded-2xl font-bold focus:border-[#6A2C70] transition-all" 
                     value={txnId}
                     onChange={(e) => setTxnId(e.target.value)}
                   />

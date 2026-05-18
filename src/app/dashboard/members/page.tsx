@@ -163,7 +163,7 @@ export default function MembersList() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <Loader2 className="w-8 h-8 animate-spin text-[#6A2C70]" />
       </div>
     )
   }
@@ -194,14 +194,14 @@ export default function MembersList() {
             <ChevronRight className="w-5 h-5 text-slate-600 rotate-180" />
           </Button>
           <div className="flex gap-2">
-            <Badge variant="secondary" className="bg-primary/10 text-primary border-0 font-bold uppercase tracking-tighter text-[10px] px-3 py-1.5 rounded-full">
+            <Badge variant="secondary" className="bg-[#6A2C70]/10 text-[#6A2C70] border-0 font-bold uppercase tracking-tighter text-[10px] px-3 py-1.5 rounded-full">
               {members.filter(m => !m.is_inactive).length} Members Active
             </Badge>
           </div>
         </div>
         
         <div className="space-y-1">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Administration</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#6A2C70]">Administration</p>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">Mess Members</h1>
         </div>
       </div>
@@ -211,7 +211,7 @@ export default function MembersList() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <Input 
             placeholder="Search members..." 
-            className="pl-10 h-12 rounded-2xl border-slate-200 bg-white shadow-sm focus:ring-primary/20"
+            className="pl-10 h-12 rounded-2xl border-slate-200 bg-white shadow-sm focus:ring-[#6A2C70]/20"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -222,8 +222,8 @@ export default function MembersList() {
           <Card key={member.id} className="border-0 shadow-sm bg-white overflow-hidden active:scale-[0.98] transition-transform">
             <CardContent className="p-4">
               <div className="flex items-start gap-4">
-                <div className={`p-3 rounded-2xl shrink-0 ${member.role === 'manager' ? 'bg-primary text-white shadow-lg shadow-primary/20' : member.role === 'co_manager' ? 'bg-purple-100 text-purple-600' : 'bg-slate-100 text-slate-500'}`}>
-                  {member.role === 'manager' ? <ShieldCheck className="w-6 h-6" /> : member.role === 'co_manager' ? <ShieldCheck className="w-6 h-6 text-purple-600" /> : <User className="w-6 h-6" />}
+                <div className={`p-3 rounded-2xl shrink-0 ${member.role === 'manager' ? 'bg-[#6A2C70] text-white shadow-lg shadow-[#6A2C70]/20' : member.role === 'co_manager' ? 'bg-[#6A2C70]/10 text-[#6A2C70]' : 'bg-slate-100 text-slate-500'}`}>
+                  {member.role === 'manager' ? <ShieldCheck className="w-6 h-6" /> : member.role === 'co_manager' ? <ShieldCheck className="w-6 h-6 text-[#6A2C70]" /> : <User className="w-6 h-6" />}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
@@ -232,7 +232,7 @@ export default function MembersList() {
                       <Badge variant="default" className="text-[9px] h-4 px-1 font-black bg-slate-900">MANAGER</Badge>
                     )}
                     {member.role === 'co_manager' && (
-                      <Badge variant="default" className="text-[9px] h-4 px-1.5 font-black bg-purple-600 text-white hover:bg-purple-700">CO-MANAGER</Badge>
+                      <Badge variant="default" className="text-[9px] h-4 px-1.5 font-black bg-[#6A2C70] text-white hover:bg-[#4D1C54]">CO-MANAGER</Badge>
                     )}
                     {member.is_inactive && (
                       <Badge variant="outline" className="text-[9px] h-4 px-1 font-black border-orange-500 text-orange-600 bg-orange-50 uppercase">ABSENT</Badge>
@@ -257,12 +257,13 @@ export default function MembersList() {
               </div>
 
               {/* Action Buttons */}
-              <div className="mt-4 pt-4 border-t border-slate-50 flex items-center justify-between gap-2">
-                <div className="flex gap-2">
+              <div className="mt-4 pt-4 border-t border-slate-50 space-y-2">
+                {/* Row 1: Cash Adjustments */}
+                <div className="grid grid-cols-2 gap-2 w-full">
                   <Button 
                     variant="outline" 
                     size="sm" 
-                    className="h-8 px-3 rounded-lg text-[11px] font-bold gap-1.5 border-slate-200"
+                    className="w-full h-8 px-3 rounded-lg text-[11px] font-bold gap-1.5 border-slate-200 justify-center"
                     onClick={() => {
                       setSelectedMember(member)
                       setAdjustType('add')
@@ -274,7 +275,7 @@ export default function MembersList() {
                   <Button 
                     variant="outline" 
                     size="sm" 
-                    className="h-8 px-3 rounded-lg text-[11px] font-bold gap-1.5 border-slate-200"
+                    className="w-full h-8 px-3 rounded-lg text-[11px] font-bold gap-1.5 border-slate-200 justify-center"
                     onClick={() => {
                       setSelectedMember(member)
                       setAdjustType('remove')
@@ -285,11 +286,12 @@ export default function MembersList() {
                   </Button>
                 </div>
                 
-                <div className="flex gap-2">
+                {/* Row 2: Status & Roles */}
+                <div className="flex gap-2 w-full">
                   <Button 
                     variant="outline" 
                     size="sm" 
-                    className={`h-8 px-3 rounded-lg text-[11px] font-bold gap-1.5 border-slate-200 ${member.is_inactive ? 'bg-orange-50 text-orange-600 border-orange-100' : ''}`}
+                    className={`h-8 px-3 rounded-lg text-[11px] font-bold gap-1.5 border-slate-200 flex-1 justify-center ${member.is_inactive ? 'bg-orange-50 text-orange-600 border-orange-100' : ''}`}
                     onClick={() => toggleInactive(member.id, !!member.is_inactive)}
                     disabled={isProcessing}
                   >
@@ -300,8 +302,8 @@ export default function MembersList() {
                     <Button 
                       variant="outline" 
                       size="sm" 
-                      className={`h-8 px-2.5 rounded-lg text-[10px] font-bold border-slate-200 ${
-                        member.role === 'co_manager' ? 'text-red-600 hover:bg-red-50 border-red-100' : 'text-purple-600 hover:bg-purple-50 border-purple-100'
+                      className={`h-8 px-2.5 rounded-lg text-[10px] font-bold border-slate-200 flex-1 justify-center ${
+                        member.role === 'co_manager' ? 'text-[#B83B5E] hover:bg-[#B83B5E]/5 border-[#B83B5E]/20' : 'text-[#6A2C70] hover:bg-[#6A2C70]/5 border-[#6A2C70]/20'
                       }`}
                       onClick={() => handleToggleCoManager(member.id, member.role)}
                       disabled={isProcessing}
@@ -314,7 +316,7 @@ export default function MembersList() {
                     <Button 
                       variant="ghost" 
                       size="icon" 
-                      className="h-8 w-8 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50"
+                      className="h-8 w-8 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 shrink-0"
                       onClick={() => setShowDeleteConfirm(member.id)}
                       disabled={isProcessing}
                     >
@@ -361,7 +363,7 @@ export default function MembersList() {
               <Button 
                 onClick={handleAdjustBalance} 
                 disabled={isProcessing}
-                className={adjustType === 'add' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}
+                className={adjustType === 'add' ? 'bg-[#6A2C70] hover:bg-[#4D1C54] text-white' : 'bg-[#B83B5E] hover:bg-[#B83B5E]/90 text-white'}
               >
                 {isProcessing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                 Confirm {adjustType === 'add' ? 'Addition' : 'Removal'}
@@ -382,9 +384,9 @@ export default function MembersList() {
             <DialogFooter className="gap-2 sm:gap-0">
               <Button variant="ghost" onClick={() => setShowDeleteConfirm(null)} disabled={isProcessing}>Keep Member</Button>
               <Button 
-                variant="destructive" 
                 onClick={() => showDeleteConfirm && handleRemoveMember(showDeleteConfirm)}
                 disabled={isProcessing}
+                className="bg-[#B83B5E] hover:bg-[#B83B5E]/90 text-white"
               >
                 {isProcessing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                 Yes, Remove

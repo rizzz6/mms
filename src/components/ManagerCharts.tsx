@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useMemo } from 'react'
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Card, CardHeader, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { 
   TrendingUp, 
@@ -51,14 +51,14 @@ interface ManagerChartsProps {
 }
 
 const COLORS = [
-  '#6366f1', // Indigo
-  '#10b981', // Emerald
-  '#f59e0b', // Amber
-  '#ef4444', // Rose
-  '#3b82f6', // Blue
-  '#8b5cf6', // Violet
-  '#ec4899', // Pink
-  '#14b8a6', // Teal
+  '#6A2C70', // Deep Plum
+  '#B83B5E', // Crimson
+  '#F08A5D', // Coral
+  '#F9ED69', // Gold
+  '#4D1C54', // Dark Plum variant
+  '#D75F79', // Lighter Crimson variant
+  '#FFA37C', // Lighter Coral variant
+  '#FFF79A', // Lighter Gold variant
 ]
 
 export default function ManagerCharts({
@@ -198,6 +198,8 @@ export default function ManagerCharts({
     }
   }, [expenseData, mealData])
 
+  const [activeTab, setActiveTab] = useState<'overview' | 'spending' | 'consumption'>('overview')
+
   if (!mounted) {
     return (
       <Card className="border-0 shadow-lg bg-white overflow-hidden rounded-[2.5rem] p-8 flex items-center justify-center min-h-[300px]">
@@ -210,248 +212,303 @@ export default function ManagerCharts({
   }
 
   return (
-    <div className="space-y-4">
-      {/* Chart Configuration Controls */}
-      <Card className="border-0 shadow-xl bg-slate-900 text-white rounded-[2rem] overflow-hidden relative">
-        <div className="absolute top-0 right-0 w-48 h-48 bg-primary/20 rounded-full -mr-24 -mt-24 blur-3xl" />
-        <div className="p-6 relative z-10 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="bg-white/10 p-2.5 rounded-xl border border-white/10 backdrop-blur-md">
-                <TrendingUp className="w-5 h-5 text-emerald-400" />
-              </div>
-              <div>
-                <p className="text-[9px] text-white/50 font-black uppercase tracking-[0.2em]">Dashboard</p>
-                <h3 className="text-lg font-black tracking-tight">Manager Analytics</h3>
-              </div>
+    <Card className="border-0 shadow-lg bg-white rounded-[2rem] overflow-hidden text-slate-900 relative">
+      <div className="absolute top-0 right-0 w-48 h-48 bg-[#6A2C70]/5 rounded-full -mr-24 -mt-24 blur-3xl" />
+      
+      <CardHeader className="p-6 pb-2 border-b border-slate-50 flex flex-col space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="bg-[#6A2C70]/10 p-2.5 rounded-xl border border-[#6A2C70]/10 backdrop-blur-sm text-[#6A2C70]">
+              <TrendingUp className="w-5 h-5" />
             </div>
-            
-            {/* Timeframe pill toggle */}
-            <div className="bg-white/5 p-1 rounded-xl border border-white/10 flex">
-              {(['1M', '3M'] as const).map(t => (
-                <button
-                  key={t}
-                  onClick={() => setTimeframe(t)}
-                  className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all duration-200 ${
-                    timeframe === t 
-                      ? 'bg-primary text-white shadow-md' 
-                      : 'text-white/60 hover:text-white hover:bg-white/5'
-                  }`}
-                >
-                  {t === '1M' ? '30 Days' : '90 Days'}
-                </button>
-              ))}
+            <div>
+              <p className="text-[9px] text-slate-400 font-black uppercase tracking-[0.2em]">Insights Hub</p>
+              <h3 className="text-lg font-black tracking-tight text-slate-800">Manager Analytics</h3>
             </div>
           </div>
 
-          {/* Quick Metrics */}
-          <div className="grid grid-cols-3 gap-2 pt-2">
-            <div className="bg-white/5 border border-white/5 rounded-2xl p-3.5 flex flex-col justify-center">
-              <span className="text-[8px] text-white/40 font-black uppercase tracking-widest mb-1">Expenses</span>
-              <span className="text-sm font-black tracking-tight text-white">₹{stats.totalExp}</span>
-            </div>
-            <div className="bg-white/5 border border-white/5 rounded-2xl p-3.5 flex flex-col justify-center">
-              <span className="text-[8px] text-white/40 font-black uppercase tracking-widest mb-1">Meals Served</span>
-              <span className="text-sm font-black tracking-tight text-white">{stats.totalMeals}</span>
-            </div>
-            <div className="bg-white/5 border border-white/5 rounded-2xl p-3.5 flex flex-col justify-center">
-              <span className="text-[8px] text-white/40 font-black uppercase tracking-widest mb-1">Avg Meal Rate</span>
-              <span className="text-sm font-black tracking-tight text-emerald-400">₹{stats.avgMealRate}</span>
-            </div>
-          </div>
+          <Badge variant="secondary" className="text-[8px] font-black uppercase tracking-widest bg-[#F08A5D]/10 text-[#F08A5D] border-0 h-5 px-2">
+            Live Intelligence
+          </Badge>
         </div>
-      </Card>
 
-      {/* Expense Line Chart Card */}
-      <Card className="border-0 shadow-lg bg-white rounded-[2rem] overflow-hidden">
-        <CardHeader className="p-5 pb-2 border-b flex flex-col space-y-1">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-2">
-              <DollarSign className="w-4 h-4 text-primary" />
-              Expense Pulse & Trends
-            </CardTitle>
-            <Badge variant="secondary" className="text-[8px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-700 border-0 h-5 px-2">
-              Verified Bazar logs
-            </Badge>
-          </div>
-          <p className="text-[10px] text-slate-400 font-medium">Daily and cumulative spending trends over the timeframe</p>
-        </CardHeader>
-        <CardContent className="p-5">
-          <div className="h-64 w-full">
-            {expenseData.length === 0 ? (
-              <div className="h-full flex items-center justify-center flex-col text-slate-400">
-                <Info className="w-8 h-8 opacity-20 mb-2" />
-                <p className="text-xs font-bold uppercase tracking-wider">No bazar logs recorded</p>
+        {/* Dynamic Nav Tabs */}
+        <div className="bg-slate-100 p-1 rounded-xl border border-slate-200/50 flex gap-1">
+          {(['overview', 'spending', 'consumption'] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all duration-200 text-center ${
+                activeTab === tab 
+                  ? 'bg-[#6A2C70] text-white shadow-md' 
+                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+              }`}
+            >
+              {tab === 'overview' ? 'Overview' : tab === 'spending' ? 'Spending Trend' : 'Meal Share'}
+            </button>
+          ))}
+        </div>
+      </CardHeader>
+
+      <CardContent className="p-6">
+        {activeTab === 'overview' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Metrics Duration:</span>
+              <div className="bg-slate-100 p-0.5 rounded-lg border border-slate-200/50 flex">
+                {(['1M', '3M'] as const).map(t => (
+                  <button
+                    key={t}
+                    onClick={() => setTimeframe(t)}
+                    className={`px-2.5 py-1 rounded text-[9px] font-black uppercase tracking-wider transition-all duration-200 ${
+                      timeframe === t 
+                        ? 'bg-white text-slate-800 shadow-sm' 
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    {t === '1M' ? '30 Days' : '90 Days'}
+                  </button>
+                ))}
               </div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={expenseData} margin={{ top: 10, right: 5, left: -25, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.4}/>
-                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
-                    </linearGradient>
-                    <linearGradient id="colorCumulative" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
-                      <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis 
-                    dataKey="formattedDate" 
-                    tick={{ fill: '#94a3b8', fontSize: 8, fontWeight: '700' }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <YAxis 
-                    tick={{ fill: '#94a3b8', fontSize: 8, fontWeight: '700' }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: '#0f172a', 
-                      borderRadius: '16px', 
-                      border: '0', 
-                      color: '#fff',
-                      fontSize: '10px',
-                      fontWeight: '700',
-                      boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)'
-                    }}
-                    labelStyle={{ color: '#94a3b8', marginBottom: '4px' }}
-                  />
-                  <Area 
-                    name="Daily Spend"
-                    type="monotone" 
-                    dataKey="expense" 
-                    stroke="#6366f1" 
-                    strokeWidth={2}
-                    fillOpacity={1} 
-                    fill="url(#colorExpense)" 
-                  />
-                  <Area 
-                    name="Total Budget"
-                    type="monotone" 
-                    dataKey="cumulativeExpense" 
-                    stroke="#10b981" 
-                    strokeWidth={2}
-                    fillOpacity={1} 
-                    fill="url(#colorCumulative)" 
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-          
-          <div className="flex items-center justify-between border-t border-slate-100 mt-4 pt-3 text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-indigo-500 inline-block" /> Daily Logs</span>
-            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-emerald-500 inline-block" /> Cumulative Trend</span>
-          </div>
-        </CardContent>
-      </Card>
+            </div>
 
-      {/* Pie Chart Card (Who eats the most meals) */}
-      <Card className="border-0 shadow-lg bg-white rounded-[2rem] overflow-hidden">
-        <CardHeader className="p-5 pb-2 border-b flex flex-col space-y-1">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-2">
-              <PieIcon className="w-4 h-4 text-primary" />
-              Meal Consumption
-            </CardTitle>
-            
-            {/* Meal Filter buttons */}
-            <div className="bg-slate-100 p-0.5 rounded-lg flex border">
-              {(['all', 'lunch', 'dinner'] as const).map(f => (
-                <button
-                  key={f}
-                  onClick={() => setMealFilter(f)}
-                  className={`px-2 py-1 rounded text-[8px] font-black uppercase tracking-wider transition-all duration-200 ${
-                    mealFilter === f 
-                      ? 'bg-white text-slate-800 shadow-sm' 
-                      : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  {f === 'all' ? 'All' : f}
-                </button>
-              ))}
+            {/* Quick Metrics */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-[#6A2C70]/5 border border-[#6A2C70]/10 rounded-2xl p-4 flex flex-col">
+                <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Total Expenses</span>
+                <span className="text-lg font-black tracking-tight text-[#6A2C70]">₹{stats.totalExp}</span>
+                <span className="text-[8px] text-slate-400 font-medium mt-1">Sum of bazaar logs</span>
+              </div>
+              
+              <div className="bg-[#F08A5D]/5 border border-[#F08A5D]/10 rounded-2xl p-4 flex flex-col">
+                <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1">Total Meals served</span>
+                <span className="text-lg font-black tracking-tight text-[#F08A5D]">{stats.totalMeals}</span>
+                <span className="text-[8px] text-slate-400 font-medium mt-1">Lunch & dinner portions</span>
+              </div>
+
+              <div className="bg-[#F9ED69]/10 border border-[#F9ED69]/30 rounded-2xl p-4 flex flex-col col-span-2">
+                <div className="flex justify-between items-baseline">
+                  <div>
+                    <span className="text-[8px] text-[#6A2C70] font-black uppercase tracking-widest mb-1 block">Avg Meal Cost</span>
+                    <span className="text-xl font-black tracking-tight text-[#6A2C70]">₹{stats.avgMealRate}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest mb-1 block">Daily Spending Avg</span>
+                    <span className="text-sm font-bold text-slate-700">₹{stats.dailyAvg}/day</span>
+                  </div>
+                </div>
+                <p className="text-[9px] text-[#6A2C70]/80 font-semibold mt-2.5 border-t border-[#6A2C70]/10 pt-2 flex items-center gap-1">
+                  <Info className="w-3.5 h-3.5 text-[#F08A5D] shrink-0" />
+                  Calculated dynamically from live active members and bazaar cashbook logs.
+                </p>
+              </div>
             </div>
           </div>
-          <p className="text-[10px] text-slate-400 font-medium">Meal eating distribution across active members</p>
-        </CardHeader>
-        <CardContent className="p-5 space-y-4">
-          <div className="flex items-center justify-center">
-            <div className="h-48 w-full max-w-[200px]">
-              {mealData.length === 0 ? (
+        )}
+
+        {activeTab === 'spending' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                  <DollarSign className="w-4 h-4 text-[#6A2C70]" />
+                  Expense Pulse & Trends
+                </h4>
+                <p className="text-[8px] text-slate-400 font-medium">Daily and cumulative spending trends over the timeframe</p>
+              </div>
+              <div className="bg-slate-100 p-0.5 rounded-lg border border-slate-200/50 flex">
+                {(['1M', '3M'] as const).map(t => (
+                  <button
+                    key={t}
+                    onClick={() => setTimeframe(t)}
+                    className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider transition-all duration-200 ${
+                      timeframe === t 
+                        ? 'bg-white text-slate-800 shadow-sm' 
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    {t === '1M' ? '30d' : '90d'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="h-64 w-full pt-2">
+              {expenseData.length === 0 ? (
                 <div className="h-full flex items-center justify-center flex-col text-slate-400">
                   <Info className="w-8 h-8 opacity-20 mb-2" />
-                  <p className="text-xs font-bold uppercase tracking-wider">No active eaters</p>
+                  <p className="text-xs font-bold uppercase tracking-wider">No bazar logs recorded</p>
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={mealData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={50}
-                      outerRadius={75}
-                      paddingAngle={3}
-                      dataKey="count"
-                    >
-                      {mealData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
+                  <AreaChart data={expenseData} margin={{ top: 10, right: 5, left: -25, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#6A2C70" stopOpacity={0.4}/>
+                        <stop offset="95%" stopColor="#6A2C70" stopOpacity={0}/>
+                      </linearGradient>
+                      <linearGradient id="colorCumulative" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#F08A5D" stopOpacity={0.2}/>
+                        <stop offset="95%" stopColor="#F08A5D" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis 
+                      dataKey="formattedDate" 
+                      tick={{ fill: '#94a3b8', fontSize: 8, fontWeight: '700' }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis 
+                      tick={{ fill: '#94a3b8', fontSize: 8, fontWeight: '700' }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
                     <Tooltip 
                       contentStyle={{ 
-                        backgroundColor: '#0f172a', 
+                        backgroundColor: '#6A2C70', 
                         borderRadius: '16px', 
-                        border: '0', 
+                        border: '1px solid rgba(249, 237, 105, 0.2)', 
                         color: '#fff',
                         fontSize: '10px',
-                        fontWeight: '700'
+                        fontWeight: '700',
+                        boxShadow: '0 10px 25px -5px rgba(106, 44, 112, 0.3)'
                       }}
-                      itemStyle={{ color: '#fff' }}
+                      labelStyle={{ color: '#F9ED69', marginBottom: '4px' }}
                     />
-                  </PieChart>
+                    <Area 
+                      name="Daily Spend"
+                      type="monotone" 
+                      dataKey="expense" 
+                      stroke="#6A2C70" 
+                      strokeWidth={2}
+                      fillOpacity={1} 
+                      fill="url(#colorExpense)" 
+                    />
+                    <Area 
+                      name="Total Budget"
+                      type="monotone" 
+                      dataKey="cumulativeExpense" 
+                      stroke="#F08A5D" 
+                      strokeWidth={2}
+                      fillOpacity={1} 
+                      fill="url(#colorCumulative)" 
+                    />
+                  </AreaChart>
                 </ResponsiveContainer>
               )}
             </div>
+            
+            <div className="flex items-center justify-between border-t border-slate-100 mt-4 pt-3 text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-[#6A2C70] inline-block" /> Daily Logs</span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-[#F08A5D] inline-block" /> Cumulative Trend</span>
+            </div>
           </div>
+        )}
 
-          {/* Custom Beautiful Legend/List with Percentages */}
-          <div className="space-y-2 pt-2 border-t border-slate-50 max-h-[160px] overflow-y-auto pr-1">
-            {mealData.slice(0, 8).map((item, index) => {
-              const percentage = stats.totalMeals > 0 
-                ? ((item.count / stats.totalMeals) * 100).toFixed(0) 
-                : '0'
+        {activeTab === 'consumption' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-2">
+                  <PieIcon className="w-4 h-4 text-[#6A2C70]" />
+                  Meal Consumption Share
+                </h4>
+                <p className="text-[8px] text-slate-400 font-medium">Meal eating distribution across active members</p>
+              </div>
+              
+              {/* Meal Filter buttons */}
+              <div className="bg-slate-100 p-0.5 rounded-lg flex border">
+                {(['all', 'lunch', 'dinner'] as const).map(f => (
+                  <button
+                    key={f}
+                    onClick={() => setMealFilter(f)}
+                    className={`px-2 py-1 rounded text-[8px] font-black uppercase tracking-wider transition-all duration-200 ${
+                      mealFilter === f 
+                        ? 'bg-white text-slate-800 shadow-sm' 
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    {f === 'all' ? 'All' : f}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-              return (
-                <div key={item.id} className="flex items-center justify-between text-xs py-1">
-                  <div className="flex items-center gap-2 truncate">
-                    <span 
-                      className="w-2.5 h-2.5 rounded-full shrink-0" 
-                      style={{ backgroundColor: COLORS[index % COLORS.length] }} 
-                    />
-                    <span className="font-bold text-slate-700 truncate">{item.name}</span>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-6 pt-2">
+              <div className="h-44 w-44 shrink-0 flex items-center justify-center">
+                {mealData.length === 0 ? (
+                  <div className="h-full flex items-center justify-center flex-col text-slate-400">
+                    <Info className="w-8 h-8 opacity-20 mb-2" />
+                    <p className="text-xs font-bold uppercase tracking-wider">No active eaters</p>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0 font-black">
-                    <span className="text-slate-900">{item.count} meals</span>
-                    <Badge variant="outline" className="text-[9px] font-black h-4 px-1 border-slate-200 text-slate-400">
-                      {percentage}%
-                    </Badge>
-                  </div>
-                </div>
-              )
-            })}
-            {mealData.length > 8 && (
-              <p className="text-[9px] text-center text-slate-400 italic pt-1">
-                + {mealData.length - 8} more members eating active portions
-              </p>
-            )}
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={mealData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={45}
+                        outerRadius={65}
+                        paddingAngle={3}
+                        dataKey="count"
+                      >
+                        {mealData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: '#6A2C70', 
+                          borderRadius: '16px', 
+                          border: '1px solid rgba(249, 237, 105, 0.2)', 
+                          color: '#fff',
+                          fontSize: '10px',
+                          fontWeight: '700'
+                        }}
+                        itemStyle={{ color: '#fff' }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+
+              {/* Custom Beautiful Legend/List with Percentages */}
+              <div className="flex-1 w-full space-y-2 max-h-[160px] overflow-y-auto pr-1">
+                {mealData.slice(0, 8).map((item, index) => {
+                  const percentage = stats.totalMeals > 0 
+                    ? ((item.count / stats.totalMeals) * 100).toFixed(0) 
+                    : '0'
+
+                  return (
+                    <div key={item.id} className="flex items-center justify-between text-xs py-1">
+                      <div className="flex items-center gap-2 truncate">
+                        <span 
+                          className="w-2.5 h-2.5 rounded-full shrink-0" 
+                          style={{ backgroundColor: COLORS[index % COLORS.length] }} 
+                        />
+                        <span className="font-bold text-slate-700 truncate">{item.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0 font-black">
+                        <span className="text-slate-900">{item.count} meals</span>
+                        <Badge variant="outline" className="text-[9px] font-black h-4 px-1 border-slate-200 text-slate-400">
+                          {percentage}%
+                        </Badge>
+                      </div>
+                    </div>
+                  )
+                })}
+                {mealData.length > 8 && (
+                  <p className="text-[9px] text-center text-slate-400 italic pt-1">
+                    + {mealData.length - 8} more members eating active portions
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
-        </CardContent>
-      </Card>
-    </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }
